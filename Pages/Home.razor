@@ -37,14 +37,49 @@
             </MudDrawerHeader>
 
             <!-- Barre de recherche -->
-            <MudTextField @bind-Value="_searchQuery"
-                          Placeholder="Rechercher une recette..."
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          Immediate="true"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Class="mb-2" />
+            <!-- Sélecteur / Barre de recherche avec autocomplétion des produits -->
+            <MudAutocomplete T="Product"
+                             Placeholder="Rechercher ou choisir un produit..."
+                             SearchFunc="@SearchProducts"
+                             ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                             ValueChanged="@OnProductSelected"
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="true"
+                             CoerceValue="false"
+                             Dense="true"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             MaxItems="300"
+                             Class="mb-2 search-autocomplete"
+                             PopoverClass="autocomplete-popover-dark">
+
+                <!-- Rendu personnalisé de chaque ligne dans la liste déroulante -->
+                <ItemTemplate Context="prod">
+                    <div class="d-flex align-center gap-2 py-1">
+                        <!-- Icône du produit avec gestion d'erreur d'affichage -->
+                        <img src="@GetProductImagePath(prod)"
+                             alt="@prod.Name"
+                             style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;"
+                             onerror="this.style.display='none';" />
+
+                        <!-- Libellé du produit -->
+                        <MudText Typo="Typo.body2">@prod.Name</MudText>
+
+                        <!-- Identifiant technique affiché discrètement -->
+                        <!-- <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ms-auto">@prod.Id</MudText> -->
+                    </div>
+                </ItemTemplate>
+
+                <!-- Message si aucun produit ne correspond à la saisie -->
+                <NoItemsTemplate>
+                    <MudText Typo="Typo.body2" Class="pa-2 text-muted">Aucun produit trouvé</MudText>
+                </NoItemsTemplate>
+
+            </MudAutocomplete>
+
 
             <!-- Filtre Entrée / Sortie / Tout : placé DIRECTEMENT sous la recherche -->
             <MudToggleGroup T="ResourceFilterMode"
@@ -189,6 +224,68 @@
         background: #38bdf8 !important;
         transition: transform 0.15s ease-in-out;
     }
+
+    /* Couleur du texte saisi dans la barre de recherche */
+        .search-autocomplete input.mud-input-slot {
+        color: #f4f4f5 !important; /* Texte clair et net */
+        font-size: 0.875rem;
+    }
+
+    /* Couleur du texte indicatif (placeholder) quand le champ est vide */
+        .search-autocomplete input.mud-input-slot::placeholder {
+        color: #a1a1aa !important; /* Gris clair parfaitement lisible */
+        opacity: 1;
+    }
+
+    /* Éclaircir également l'icône loupe et la croix d'effacement */
+    .search-autocomplete .mud-input-adornment-start .mud-icon-root,
+    .search-autocomplete .mud-input-adornment-end .mud-icon-root {
+        color: #a1a1aa !important;
+    }
+
+    /* Couleur de la bordure du champ en mode sombre */
+    .search-autocomplete .mud-input-outlined-border {
+        border-color: #3f3f46 !important;
+    }
+
+    /* Bordure plus lumineuse lors du survol ou du focus */
+    .search-autocomplete:hover .mud-input-outlined-border,
+    .search-autocomplete.mud-input-focused .mud-input-outlined-border {
+        border-color: #38bdf8 !important; /* Teinte bleue cyan */
+    }
+
+    /* 1. Fenêtre déroulante complète (Popover) */
+    .autocomplete-popover-dark {
+        background-color: #242424 !important; /* Même fond sombre que le panneau */
+        border: 1px solid #3f3f46 !important; /* Bordure discrète */
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    /* 2. Liste interne */
+    .autocomplete-popover-dark .mud-list {
+        background-color: transparent !important;
+        padding: 4px !important;
+    }
+
+    /* 3. Lignes de produits (Item individuel) */
+    .autocomplete-popover-dark .mud-list-item {
+        color: #f4f4f5 !important; /* Texte clair */
+        border-radius: 4px;
+        transition: background-color 0.15s ease-in-out;
+    }
+
+    /* 4. Effet lors du survol de la souris ou de la sélection au clavier */
+    .autocomplete-popover-dark .mud-list-item:hover,
+    .autocomplete-popover-dark .mud-list-item.mud-selected-item {
+        background-color: #38bdf820 !important; /* Légère touche cyan translucide */
+        color: #38bdf8 !important; /* Texte bleu cyan au survol */
+    }
+
+    /* 5. Message quand rien n'est trouvé */
+    .autocomplete-popover-dark .text-muted {
+        color: #a1a1aa !important;
+    }
+
 </style>
 
 
@@ -210,6 +307,10 @@
     private bool _drawerOpen = true;
     private string _searchQuery = "";
     private double _spawnOffset = 150;
+
+    // Stocke la liste brute de tous les produits pour alimenter la recherche
+    private List<Product> _allProducts = new();
+
 
 
     private ResourceFilterMode _filterMode = ResourceFilterMode.All;
@@ -252,6 +353,49 @@
     //                           r.Outputs.Any(o => o.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
     
 
+    // 1. Fonction de recherche asynchrone appelée à chaque frappe dans le champ
+    private async Task<IEnumerable<Product>> SearchProducts(string value, CancellationToken token)
+    {
+        // Met à jour la chaîne globale pour que FilteredRecipes prenne en compte la frappe libre
+        _searchQuery = value ?? string.Empty;
+
+        // Si le champ est vide, retourne la liste complète triée par nom
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return _allProducts.OrderBy(p => p.Name);
+        }
+
+        var term = value.Trim();
+
+        // Filtre sur le nom affiché (Name) ou sur l'identifiant (Id)
+        return _allProducts
+            .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(p => p.Name);
+    }
+
+    // 2. Déclenché lors du clic sur un produit suggéré ou lors de l'effacement
+    private void OnProductSelected(Product? selected)
+    {
+        // Si un produit est sélectionné, on filtre sur son Id, sinon chaîne vide
+        _searchQuery = selected?.Id ?? string.Empty;
+    }
+
+    // 3. Calcule le chemin de l'image en nettoyant le slash initial éventuel
+    private string GetProductImagePath(Product? prod)
+    {
+        if (prod == null) return string.Empty;
+
+        var path = !string.IsNullOrWhiteSpace(prod.Image)
+            ? prod.Image
+            : $"images/resources/{prod.Id}.png";
+
+        return path.TrimStart('/');
+    }
+
+
+
+
     protected override async Task OnInitializedAsync()
     {
         // 1. Chargement des données globales
@@ -264,6 +408,9 @@
             {
                 if (data.Products != null)
                 {
+                    // Conserve la liste complète pour la barre de recherche
+                    _allProducts = data.Products;
+
                     ProductDict = data.Products.ToDictionary(p => p.Id, p => p);
                     ResourceService.Load(data.Products);
                 }
