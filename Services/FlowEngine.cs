@@ -78,6 +78,12 @@ public static class FlowEngine
 
         DistributeFlows(diagram, machineNodes, useActualProduction: true);
 
+        // Force la notification de redessin sur chaque carte machine
+        foreach (var node in machineNodes)
+        {
+            node.Refresh();
+        }
+
         diagram.Refresh();
 
     }
