@@ -3,12 +3,15 @@
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
 
-
 <MudTooltip Text="@TooltipText" Placement="Placement.Top" Arrow="true">
     <div class="resource-badge">
         <img src="@ImagePath" 
              alt="@TooltipText" 
-             class="resource-icon" 
+             class="resource-icon"
+             loading="lazy"
+             decoding="async"
+             draggable="false"
+             onload="this.style.display='block'; this.nextElementSibling.style.display='none';"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" />
         <!-- Repli textuel si l'image n'est pas trouvée -->
         <span class="resource-fallback" style="display:none;">@FallbackName</span>
@@ -30,14 +33,16 @@
         cursor: pointer;
     }
 
-        .resource-badge:hover {
-            border-color: #3b82f6;
-        }
+    .resource-badge:hover {
+        border-color: #3b82f6;
+    }
 
     .resource-icon {
         width: 100%;
         height: 100%;
         object-fit: contain;
+        user-select: none;
+        -webkit-user-drag: none;
     }
 
     .resource-fallback {
@@ -47,20 +52,27 @@
     }
 </style>
 
-@code {
-    [Parameter, EditorRequired] public string ResourceId { get; set; } = string.Empty;
 
-    // Récupération de la ressource dans le service
-    private Resource? Res => ResourceService.Get(ResourceId);
+
+
+@code {
+    [Parameter] public string ProductId { get; set; } = string.Empty;
+    [Parameter] public string? ResourceId { get; set; }
+
+    // Utilise ProductId ou se rabat sur ResourceId si le menu utilise encore l'ancien nom
+    private string EffectiveId =>
+        !string.IsNullOrWhiteSpace(ProductId) ? ProductId : (ResourceId ?? string.Empty);
+
+    private Product? Prod => ResourceService.GetProduct(EffectiveId);
 
     // 1. Image : utilise le chemin exact défini dans le JSON, ou repli par défaut
     private string ImagePath
     {
         get
         {
-            var path = !string.IsNullOrWhiteSpace(Res?.Image) 
-                ? Res.Image 
-                : $"images/resources/{ResourceId}.png";
+            var path = !string.IsNullOrWhiteSpace(Prod?.Image)
+                ? Prod.Image
+                : $"images/resources/{EffectiveId}.png";
 
             // Supprime le slash initial éventuel pour rester relatif à la base du site
             return path.TrimStart('/');
@@ -69,10 +81,10 @@
 
     // 2. Nom : utilise le vrai nom du JSON (ex: "Acid", "Iron Ore")
     private string TooltipText =>
-        Res?.Name ?? System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(ResourceId.Replace("_", " "));
+        Prod?.Name ?? ProductId;
 
     // 3. Trois premières lettres pour le secours
     private string FallbackName =>
-        (Res?.Name ?? ResourceId).Substring(0, Math.Min(3, (Res?.Name ?? ResourceId).Length));
+        (Prod?.Name ?? ProductId).Substring(0, Math.Min(3, (Prod?.Name ?? ProductId).Length));
 
 }

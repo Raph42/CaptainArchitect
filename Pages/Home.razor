@@ -46,12 +46,11 @@
         <div class="recipes-list">
             @if (FilteredRecipes != null)
             {
-                @foreach (var recipe in FilteredRecipes)
-                {
+                <Virtualize Items="@FilteredRecipes.ToList()" Context="recipe">
                     <MudCard Class="mb-2 recipe-card" Outlined="true">
                         <MudCardContent Class="pa-2">
                             <div class="d-flex justify-space-between align-center">
-                                <MudText Typo="Typo.subtitle2" Class="fw-bold">@recipe.Name</MudText>
+                                <MudText Typo="Typo.subtitle2" Class="fw-bold">@recipe.RecipeId</MudText>
                                 <MudIconButton Icon="@Icons.Material.Filled.AddCircle"
                                                Color="Color.Primary"
                                                Size="MudBlazor.Size.Small"
@@ -59,29 +58,45 @@
                                                OnClick="@(() => AddRecipeNode(recipe))" />
                             </div>
 
+                            <!-- Entrées -->
                             <div class="d-flex align-center gap-1 mt-1">
+                                
                                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="me-1">In:</MudText>
+                                
                                 @foreach (var input in recipe.Inputs)
                                 {
-                                    <ResourceBadge ResourceId="@input.ResourceId" />
+                                    @if (!string.IsNullOrWhiteSpace(input.ProductId))
+                                    {
+                                        <ResourceBadge @key="@($"{recipe.RecipeId}_in_{input.ProductId}")" 
+                                                       ProductId="@input.ProductId" />
+                                    }
                                 }
+                                
+                                <!-- Sorties -->
                                 <MudText Typo="Typo.caption" Color="Color.Tertiary" Class="ms-2 me-1">Out:</MudText>
+                                
                                 @foreach (var output in recipe.Outputs)
                                 {
-                                    <ResourceBadge ResourceId="@output.ResourceId" />
+                                    @if (!string.IsNullOrWhiteSpace(output.ProductId))
+                                    {
+                                        <ResourceBadge @key="@($"{recipe.RecipeId}_out_{output.ProductId}")"
+                                                       ProductId="@output.ProductId" />
+                                    }
                                 }
+
                             </div>
-
-
                         </MudCardContent>
                     </MudCard>
-                }
+                </Virtualize>
             }
+
             else
             {
                 <MudProgressCircular Indeterminate="true" Size="MudBlazor.Size.Small" />
             }
+
         </div>
+
     </MudDrawer>
 
     <!-- Zone principale : Diagramme -->
@@ -163,31 +178,45 @@
     private List<Recipe>? Recipes { get; set; }
 
     // Renommé pour éviter le conflit avec le namespace .NET "Resources"
-    private Dictionary<string, Resource> ResourceDict { get; set; } = new();
+    private Dictionary<string, Product> ProductDict { get; set; } = new();
 
     private bool _drawerOpen = true;
     private string _searchQuery = "";
     private double _spawnOffset = 150;
 
     private IEnumerable<Recipe>? FilteredRecipes =>
-        string.IsNullOrWhiteSpace(_searchQuery)
-            ? Recipes
-            : Recipes?.Where(r => r.Name.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                                  r.Inputs.Any(i => i.ResourceId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                                  r.Outputs.Any(o => o.ResourceId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
+    string.IsNullOrWhiteSpace(_searchQuery)
+        ? Recipes
+        : Recipes?.Where(r => r.RecipeId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                              r.Inputs.Any(i => i.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                              r.Outputs.Any(o => o.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
+    
 
     protected override async Task OnInitializedAsync()
     {
         // 1. Chargement des données globales
         try
         {
-            Recipes = await Http.GetFromJsonAsync<List<Recipe>>("data/recipes.json");
-
-            var resourceList = await Http.GetFromJsonAsync<List<Resource>>("data/resources.json");
-            if (resourceList != null)
+            // Chargement du fichier unique
+            var data = await Http.GetFromJsonAsync<CoiData>("data/captain_of_industry_data.json");
+            
+            if (data != null)
             {
-                ResourceDict = resourceList.ToDictionary(r => r.Id, r => r);
-                ResourceService.Load(resourceList);
+                if (data.Products != null)
+                {
+                    ProductDict = data.Products.ToDictionary(p => p.Id, p => p);
+                    ResourceService.Load(data.Products);
+                }
+
+                if (data.Machines != null)
+                {
+                    ResourceService.LoadMachines(data.Machines);
+                }
+
+                Recipes = data.Recipes;
+
+                // Force le re-rendu du tiroir avec les données prêtes
+                StateHasChanged();
             }
         }
         catch (Exception ex)
@@ -234,9 +263,9 @@
                     // Récupère la couleur globale associée à l'identifiant de la ressource
                     if (source is ResourcePortModel resPort)
                     {
-                        if (ResourceDict.TryGetValue(resPort.ResourceId, out var res) && !string.IsNullOrWhiteSpace(res.Color))
+                        if (ProductDict.TryGetValue(resPort.ProductId, out var prod) && !string.IsNullOrWhiteSpace(prod.Color))
                         {
-                            link.Color = res.Color;
+                            link.Color = prod.Color;
                         }
                     }
 

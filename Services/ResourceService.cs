@@ -7,17 +7,33 @@ namespace CaptainArchitect.Services;
 
 public class ResourceService
 {
-    private readonly Dictionary<string, Resource> _resources = new();
+    private readonly Dictionary<string, Product> _products = new();
+    private readonly Dictionary<string, Machine> _machines = new();
 
-    public void Load(IEnumerable<Resource> resources)
+    // Chargement des produits
+    public void Load(IEnumerable<Product> products)
     {
-        _resources.Clear();
-        foreach (var r in resources)
+        _products.Clear();
+        foreach (var p in products)
         {
-            _resources[r.Id] = r;
+            _products[p.Id] = p;
         }
     }
 
-    public Resource? Get(string resourceId) =>
-        _resources.TryGetValue(resourceId, out var res) ? res : null;
+    // Chargement des machines
+    public void LoadMachines(IEnumerable<Machine> machines)
+    {
+        _machines.Clear();
+        foreach (var m in machines)
+        {
+            _machines[m.Id] = m;
+        }
+    }
+
+    public Product? GetProduct(string productId) =>
+        _products.TryGetValue(productId, out var prod) ? prod : null;
+
+    public Machine? GetMachine(string machineId) =>
+        _machines.TryGetValue(machineId, out var machine) ? machine : null;
+
 }

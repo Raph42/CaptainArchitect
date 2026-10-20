@@ -19,7 +19,7 @@ public static class FlowEngine
             node.ActualInputRates.Clear();
             node.DistributedOutputRates.Clear();
             node.DownstreamDemandRates.Clear();
-            node.OperationalEfficiency = 1.0m;
+            //node.OperationalEfficiency = 1.0m;
 
             foreach (var port in node.Ports.OfType<ResourcePortModel>())
             {
@@ -34,132 +34,120 @@ public static class FlowEngine
         }
 
 
-        // 2. Boucle de propagation (2 à 3 passes pour propager d'amont en aval)
-        int iterations = Math.Max(3, machineNodes.Count);
+        // 2. Première passe : calcul des demandes et distribution de la production nominale
+        DistributeFlows(diagram, machineNodes, useActualProduction: false);
 
-        for (int iter = 0; iter < iterations; iter++)
-        {
-            // Réinitialiser les entrées avant chaque passe
-            foreach (var node in machineNodes)
-            {
-                foreach (var port in node.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Input))
-                {
-                    node.ActualInputRates[port.Id] = 0m;
-                }
-            }
-
-            // Distribution de la production réelle vers les entrées
-            foreach (var sourceNode in machineNodes)
-            {
-                for (int i = 0; i < sourceNode.Recipe.Outputs.Count; i++)
-                {
-                    var outputItem = sourceNode.Recipe.Outputs[i];
-                    var outputPort = sourceNode.Ports.OfType<ResourcePortModel>()
-                        .FirstOrDefault(p => p.Direction == PortDirection.Output && p.ResourceId == outputItem.ResourceId);
-
-                    if (outputPort == null) continue;
-
-                    // PRODUCTION RÉELLE (bridée par l'alimentation de la machine)
-                    decimal actualProduction = sourceNode.GetActualProducedRatePerMin(outputItem);
-
-                    // Trouver les ports cibles
-                    var connectedTargetPorts = new List<ResourcePortModel>();
-                    foreach (var link in diagram.Links)
-                    {
-                        ResourcePortModel? srcPort = (link.Source as SinglePortAnchor)?.Port as ResourcePortModel;
-                        ResourcePortModel? tgtPort = (link.Target as SinglePortAnchor)?.Port as ResourcePortModel;
-
-                        if (srcPort == outputPort && tgtPort is { Direction: PortDirection.Input })
-                            connectedTargetPorts.Add(tgtPort);
-                        else if (tgtPort == outputPort && srcPort is { Direction: PortDirection.Input })
-                            connectedTargetPorts.Add(srcPort);
-                    }
-
-                    if (connectedTargetPorts.Count == 0) continue;
-
-                    // Calcul de la demande totale
-                    decimal totalDemand = 0m;
-                    var targetDemands = new Dictionary<ResourcePortModel, decimal>();
-
-                    foreach (var targetPort in connectedTargetPorts)
-                    {
-                        if (targetPort.Parent is MachineNodeModel targetNode)
-                        {
-                            var reqItem = targetNode.Recipe.Inputs.FirstOrDefault(inp => inp.ResourceId == targetPort.ResourceId);
-                            decimal demand = reqItem != null ? targetNode.GetInputRatePerMin(reqItem) : 0m;
-                            targetDemands[targetPort] = demand;
-                            totalDemand += demand;
-                        }
-                    }
-
-                    sourceNode.DownstreamDemandRates[outputPort.Id] = totalDemand;
-
-                    // Répartition au prorata de la production réelle disponible
-                    decimal distributedTotal = 0m;
-                    foreach (var targetPort in connectedTargetPorts)
-                    {
-                        decimal demand = targetDemands[targetPort];
-                        decimal flow = 0m;
-
-                        if (totalDemand > 0)
-                        {
-                            if (actualProduction >= totalDemand)
-                                flow = demand;
-                            else
-                                flow = actualProduction * (demand / totalDemand);
-                        }
-
-                        if (targetPort.Parent is MachineNodeModel targetNode)
-                        {
-                            targetNode.ActualInputRates[targetPort.Id] += flow;
-                        }
-                        distributedTotal += flow;
-                    }
-
-                    sourceNode.DistributedOutputRates[outputPort.Id] = distributedTotal;
-                }
-            }
-
-            // Calcul du taux d'activité (Efficiency) de chaque machine
-            foreach (var node in machineNodes)
-            {
-                // On ne prend en compte que les ports d'entrée EFFECTIVEMENT reliés à un tuyau
-                var connectedInputPorts = node.Ports.OfType<ResourcePortModel>()
-                    .Where(p => p.Direction == PortDirection.Input && p.Links.Count > 0)
-                    .ToList();
-
-                // Si aucune entrée n'est reliée, la machine est considérée disponible à 100% de sa capacité théorique
-                if (connectedInputPorts.Count == 0)
-                {
-                    node.OperationalEfficiency = 1.0m;
-                    continue;
-                }
-
-                decimal minRatio = 1.0m;
-                foreach (var port in connectedInputPorts)
-                {
-                    var inputItem = node.Recipe.Inputs.FirstOrDefault(i => i.ResourceId == port.ResourceId);
-                    if (inputItem != null)
-                    {
-                        decimal required = node.GetInputRatePerMin(inputItem);
-                        decimal actual = node.GetActualInputRate(port.Id);
-
-                        decimal ratio = required > 0 ? (actual / required) : 1.0m;
-                        if (ratio < minRatio) minRatio = ratio;
-                    }
-                }
-
-                node.OperationalEfficiency = Math.Clamp(minRatio, 0m, 1m);
-            }
-
-        }
-
-
-        // Notifier les nœuds pour le rafraîchissement graphique
+        // 3. Calcul du taux d'activité (Efficiency) selon les entrées connectées
         foreach (var node in machineNodes)
         {
-            node.Refresh();
+            var connectedInputPorts = node.Ports.OfType<ResourcePortModel>()
+                .Where(p => p.Direction == PortDirection.Input && p.Links.Count > 0)
+                .ToList();
+
+            if (connectedInputPorts.Count == 0)
+            {
+                node.OperationalEfficiency = 1.0m;
+                continue;
+            }
+
+            decimal minRatio = 1.0m;
+            foreach (var port in connectedInputPorts)
+            {
+                var inputItem = node.Recipe.Inputs.FirstOrDefault(i => i.ProductId == port.ProductId);
+                if (inputItem != null)
+                {
+                    decimal required = node.GetInputRatePerMin(inputItem);
+                    decimal actual = node.GetActualInputRate(port.Id);
+
+                    decimal ratio = required > 0 ? (actual / required) : 1.0m;
+                    if (ratio < minRatio) minRatio = ratio;
+                }
+            }
+
+            node.OperationalEfficiency = Math.Clamp(minRatio, 0m, 1m);
         }
 
+        // 4. Deuxième passe : redistribution tenant compte de la production réelle
+        foreach (var node in machineNodes)
+        {
+            foreach (var port in node.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Input))
+            {
+                node.ActualInputRates[port.Id] = 0m;
+            }
+        }
+
+        DistributeFlows(diagram, machineNodes, useActualProduction: true);
+
+        diagram.Refresh();
+
     }
+
+
+
+    private static void DistributeFlows(BlazorDiagram diagram, List<MachineNodeModel> machineNodes, bool useActualProduction)
+    {
+        foreach (var sourceNode in machineNodes)
+        {
+            foreach (var outputPort in sourceNode.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Output))
+            {
+                var outputItem = sourceNode.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
+                if (outputItem == null) continue;
+
+                decimal availableRate = useActualProduction
+                    ? sourceNode.GetActualProducedRatePerMin(outputItem)
+                    : sourceNode.GetOutputRatePerMin(outputItem);
+
+                // Recherche des ports cibles connectés via diagram.Links
+                var connectedTargetPorts = diagram.Links
+                    .Where(l => (l.Source as SinglePortAnchor)?.Port == outputPort && (l.Target as SinglePortAnchor)?.Port != null)
+                    .Select(l => ((SinglePortAnchor)l.Target).Port as ResourcePortModel)
+                    .Where(p => p != null && p.Direction == PortDirection.Input)
+                    .Cast<ResourcePortModel>()
+                    .ToList();
+
+                if (connectedTargetPorts.Count == 0) continue;
+
+                // Total de la demande en aval
+                decimal totalDemand = 0m;
+                var targetDemands = new Dictionary<ResourcePortModel, decimal>();
+
+                foreach (var targetPort in connectedTargetPorts)
+                {
+                    if (targetPort.Parent is MachineNodeModel targetNode)
+                    {
+                        var reqItem = targetNode.Recipe.Inputs.FirstOrDefault(inp => inp.ProductId == targetPort.ProductId);
+                        decimal demand = reqItem != null ? targetNode.GetInputRatePerMin(reqItem) : 0m;
+                        targetDemands[targetPort] = demand;
+                        totalDemand += demand;
+                    }
+                }
+
+                sourceNode.DownstreamDemandRates[outputPort.Id] = totalDemand;
+
+                // Répartition proportionnelle
+                decimal deliveredTotal = 0m;
+                foreach (var targetPort in connectedTargetPorts)
+                {
+                    decimal demand = targetDemands[targetPort];
+                    decimal allocated = 0m;
+
+                    if (totalDemand > 0)
+                    {
+                        allocated = Math.Min(demand, availableRate * (demand / totalDemand));
+                    }
+
+                    deliveredTotal += allocated;
+
+                    if (targetPort.Parent is MachineNodeModel targetNode)
+                    {
+                        targetNode.ActualInputRates[targetPort.Id] = targetNode.GetActualInputRate(targetPort.Id) + allocated;
+                    }
+                }
+
+                sourceNode.DistributedOutputRates[outputPort.Id] = deliveredTotal;
+            }
+        }
+    }
+
+
 }

@@ -12,13 +12,13 @@ public enum PortDirection
 
 public class ResourcePortModel : PortModel
 {
-    public string ResourceId { get; }
+    public string ProductId { get; }
     public PortDirection Direction { get; }
 
-    public ResourcePortModel(string resourceId, NodeModel parent, PortDirection direction, PortAlignment alignment)
+    public ResourcePortModel(string productId, NodeModel parent, PortDirection direction, PortAlignment alignment)
         : base(parent, alignment)
     {
-        ResourceId = resourceId;
+        ProductId = productId;
         Direction = direction;
     }
 
@@ -38,7 +38,7 @@ public class ResourcePortModel : PortModel
             return false;
 
         // 4.Les deux ports doivent partager exactement la même ressource
-        if (!string.Equals(this.ResourceId, targetPort.ResourceId, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(this.ProductId, targetPort.ProductId, StringComparison.OrdinalIgnoreCase))
             return false;
 
         // Lorsqu'un utilisateur étire un câble vers un port déjà branché à cette même sortie,

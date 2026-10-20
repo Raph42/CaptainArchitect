@@ -11,20 +11,18 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 @using Blazor.Diagrams.Core
 @using CaptainArchitect.Models
 @using CaptainArchitect.Services
+@inject ResourceService ResourceService
 
 <div class="machine-card @(Node.Selected ? "selected" : "")"
+
     @oncontextmenu="OnRightClick" 
     @oncontextmenu:preventDefault="true">
     <!-- En-tête : Titre à gauche, Actions (sélecteur + croix) à droite -->
+
     <div class="machine-header">
         <div class="d-flex align-center gap-1">
-            <span class="machine-title">@Node.Recipe.Name</span>
-            @if (Node.Recipe.Time is null or <= 0)
-            {
-                <MudTooltip Text="Durée 'Time' non renseignée ou nulle !" Arrow="true">
-                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="MudBlazor.Size.Small" />
-                </MudTooltip>
-            }
+            <span class="machine-title">@Node.Recipe.RecipeId</span>
+
         </div>
 
         <!-- Conteneur poussé tout à droite -->
@@ -66,7 +64,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
                     <div class="port-row input-row">
                         <PortRenderer Port="port" Class="diagram-port" />
-                        <ResourceBadge ResourceId="@input.ResourceId" />
+                        <ResourceBadge ProductId="@input.ProductId" />
 
                         <div class="rate-stack">
                             @* Ligne 1 : Débit théorique total + Débit de base si Multiplier > 1 *@
@@ -104,23 +102,22 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         </div>
 
 
-        <!-- Centre : Icône du bâtiment -->
+        <!-- Centre : Icône machine -->
+        <!-- Centre : Image de la machine issue du JSON -->
         <div class="machine-center-icon">
-            <MudTooltip Text="@GetBuildingTooltip()" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="@MachineTooltip" Arrow="true" Placement="Placement.Top">
                 <div class="building-icon-wrapper">
-                    <img src="@GetBuildingIconPath()" 
-                         alt="@Node.Recipe.BuildingId" 
+                    <img src="@MachineImagePath" 
+                         alt="@MachineTooltip" 
                          class="building-icon"
                          draggable="false"
                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-                    <!-- Secours si l'image n'est pas encore présente -->
                     <div class="building-fallback" style="display:none;">
                         <MudIcon Icon="@Icons.Material.Filled.Factory" Size="MudBlazor.Size.Medium" Color="Color.Default" />
                     </div>
                 </div>
             </MudTooltip>
         </div>
-
 
         <!-- Colonne Sorties -->
         <div class="port-column outputs">
@@ -188,7 +185,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                                 </span>
                             }
                         </div>
-                        <ResourceBadge ResourceId="@output.ResourceId" />
+                        <ResourceBadge ProductId="@output.ProductId" />
                         <PortRenderer Port="port" Class="diagram-port" />
                     </div>
                 }
@@ -461,13 +458,30 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         Diagram.Nodes.Remove(Node);
     }
 
-    private string GetBuildingIconPath() => $"images/buildings/{Node.Recipe.BuildingId}.png";
+    
+    // 1. Identifie la machine liée à la recette
+    private string MachineId =>
+    Node.Recipe.MachineBindings?.FirstOrDefault()?.MachineId ?? string.Empty;
 
-    private string GetBuildingTooltip()
+    // 2. Récupère l'objet Machine depuis le service
+    private Machine? CurrentMachine => ResourceService.GetMachine(MachineId);
+
+    // 3. Utilise directement la propriété "Image" du JSON (ex: "/images/buildings/BakingUnit.png")
+    private string MachineImagePath
     {
-        var clean = Node.Recipe.BuildingId.Replace("_", " ");
-        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(clean);
+        get
+        {
+            var path = !string.IsNullOrWhiteSpace(CurrentMachine?.Image)
+                ? CurrentMachine.Image
+                : $"images/buildings/{MachineId}.png";
+
+            // TrimStart('/') permet d'éviter les erreurs de base-path selon l'hébergement Blazor
+            return path.TrimStart('/');
+        }
     }
+
+    private string MachineTooltip => CurrentMachine?.Name ?? MachineId;
+
 
     private void OnRightClick()
     {
