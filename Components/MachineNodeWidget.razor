@@ -436,6 +436,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
     [CascadingParameter] public BlazorDiagram Diagram { get; set; } = default!;
     [Parameter] public MachineNodeModel Node { get; set; } = default!;
 
+
     private void IncreaseCount()
     {
         Node.Multiplier += 1m;
@@ -485,7 +486,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
     private void OnRightClick()
     {
-        DeleteNode();
+        //DeleteNode();
     }
 
 }

@@ -78,10 +78,16 @@ public static class FlowEngine
 
         DistributeFlows(diagram, machineNodes, useActualProduction: true);
 
-        // Force la notification de redessin sur chaque carte machine
         foreach (var node in machineNodes)
         {
-            node.Refresh();
+            // OPTIMISATION : Ne rafraîchir que les nœuds qui possèdent au moins un lien,
+            // ou dont les flux ont été calculés. Les machines isolées n'ont pas besoin d'être redessinées.
+            bool hasLinks = node.Ports.Any(p => p.Links.Count > 0);
+
+            if (hasLinks)
+            {
+                node.Refresh();
+            }
         }
 
         diagram.Refresh();

@@ -27,23 +27,43 @@
                Elevation="3"
                Variant="@DrawerVariant.Responsive"
                Width="340px"
-               Class="pa-3 bg-dark-drawer">
-        <MudDrawerHeader Class="px-0">
-            <MudText Typo="Typo.h6">Recettes COI</MudText>
-        </MudDrawerHeader>
+               Class="pa-3 bg-dark-drawer d-flex flex-column"
+               Style="height: 100vh;">
 
-        <!-- Barre de recherche -->
-        <MudTextField @bind-Value="_searchQuery"
-                      Placeholder="Rechercher une recette..."
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search"
-                      Immediate="true"
-                      Variant="Variant.Outlined"
-                      Margin="Margin.Dense"
-                      Class="mb-3" />
+        <!-- 1. ZONE FIXE DU HAUT (Titre + Recherche + Filtres) -->
+        <div style="flex-shrink: 0;">
+            <MudDrawerHeader Class="px-0 py-2">
+                <MudText Typo="Typo.h6">Recettes COI</MudText>
+            </MudDrawerHeader>
 
-        <!-- Liste des recettes filtrées -->
-        <div class="recipes-list">
+            <!-- Barre de recherche -->
+            <MudTextField @bind-Value="_searchQuery"
+                          Placeholder="Rechercher une recette..."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Class="mb-2" />
+
+            <!-- Filtre Entrée / Sortie / Tout : placé DIRECTEMENT sous la recherche -->
+            <MudToggleGroup T="ResourceFilterMode"
+                            @bind-Value="_filterMode"
+                            Color="Color.Primary"
+                            CheckMark="false"
+                            FixedContent="true"
+                            Size="MudBlazor.Size.Small"
+                            Class="mb-3 w-100 d-flex justify-center"
+                            Style="background-color: #1e1e1e; border: 1px solid #444; border-radius: 4px;">
+                <MudToggleItem Value="ResourceFilterMode.All" Text="Tout" Class="flex-grow-1" />
+                <MudToggleItem Value="ResourceFilterMode.Input" Text="Entrées" Class="flex-grow-1" />
+                <MudToggleItem Value="ResourceFilterMode.Output" Text="Sorties" Class="flex-grow-1" />
+            </MudToggleGroup>
+        </div>
+
+
+        <!-- 2. ZONE SCROLLABLE (Seule la liste défile) -->
+        <div class="recipes-list flex-grow-1" style="overflow-y: auto; min-height: 0;">
             @if (FilteredRecipes != null)
             {
                 <Virtualize Items="@FilteredRecipes.ToList()" Context="recipe">
@@ -143,7 +163,6 @@
 
     .recipes-list {
         overflow-y: auto;
-        max-height: calc(100vh - 220px);
         padding-right: 4px;
     }
 
@@ -174,6 +193,14 @@
 
 
 @code {
+
+    public enum ResourceFilterMode
+    {
+        All,    // Les deux (entrées ou sorties)
+        Input,  // Seulement si présent en entrée
+        Output  // Seulement si présent en sortie
+    }
+
     private BlazorDiagram Diagram { get; set; } = default!;
     private List<Recipe>? Recipes { get; set; }
 
@@ -184,12 +211,45 @@
     private string _searchQuery = "";
     private double _spawnOffset = 150;
 
+
+    private ResourceFilterMode _filterMode = ResourceFilterMode.All;
+
     private IEnumerable<Recipe>? FilteredRecipes =>
-    string.IsNullOrWhiteSpace(_searchQuery)
-        ? Recipes
-        : Recipes?.Where(r => r.RecipeId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                              r.Inputs.Any(i => i.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                              r.Outputs.Any(o => o.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
+        Recipes?.Where(r =>
+        {
+            // 1. Si la barre de recherche est vide, on affiche tout le catalogue
+            if (string.IsNullOrWhiteSpace(_searchQuery))
+                return true;
+
+            var query = _searchQuery.Trim();
+
+            // 2. Vérification ciblée sur les entrées et les sorties
+            bool matchesInput = r.Inputs.Any(i =>
+                !string.IsNullOrWhiteSpace(i.ProductId) &&
+                i.ProductId.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+            bool matchesOutput = r.Outputs.Any(o =>
+                !string.IsNullOrWhiteSpace(o.ProductId) &&
+                o.ProductId.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+            // 3. Correspondance sur le nom de la recette uniquement utile en mode "Tout"
+            bool matchesName = r.RecipeId.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+            // 4. Filtrage strict selon le mode sélectionné
+            return _filterMode switch
+            {
+                ResourceFilterMode.Input => matchesInput,
+                ResourceFilterMode.Output => matchesOutput,
+                _ => matchesName || matchesInput || matchesOutput
+            };
+        });
+
+    // private IEnumerable<Recipe>? FilteredRecipes =>
+    // string.IsNullOrWhiteSpace(_searchQuery)
+    //     ? Recipes
+    //     : Recipes?.Where(r => r.RecipeId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+    //                           r.Inputs.Any(i => i.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+    //                           r.Outputs.Any(o => o.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
     
 
     protected override async Task OnInitializedAsync()
@@ -282,6 +342,7 @@
         {
             link.TargetAttached += (l) => FlowEngine.RecalculateFlows(Diagram);
         };
+
         Diagram.Links.Removed += link => FlowEngine.RecalculateFlows(Diagram);
         Diagram.Nodes.Removed += node => FlowEngine.RecalculateFlows(Diagram);
 
