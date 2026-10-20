@@ -7,33 +7,59 @@ et
 Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 -->
 
+@using MudBlazor
 @using Blazor.Diagrams.Components.Renderers
 @using Blazor.Diagrams.Core
 @using CaptainArchitect.Models
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
 
+
 <div class="machine-card @(Node.Selected ? "selected" : "")"
 
     @oncontextmenu="OnRightClick" 
     @oncontextmenu:preventDefault="true">
-    <!-- En-tête : Titre à gauche, Actions (sélecteur + croix) à droite -->
+
+    <!-- En-tête : Nom de la machine + Boutons Upgrade/Downgrade à gauche, Contrôles Multiplier + Croix à droite -->
 
     <div class="machine-header">
-        <div class="d-flex align-center gap-1">
-            <span class="machine-title">@Node.Recipe.RecipeId</span>
+        <div class="d-flex align-center">
+
+            <!-- Nom de la machine (au lieu du nom de la recette) -->
+            <span class="machine-title" title="@MachineDisplayName (@Node.Recipe.RecipeId)">
+                @MachineDisplayName
+            </span>
+
+            <!-- Boutons Upgrade / Downgrade si plusieurs machines existent pour cette recette -->
+            @if (Node.Recipe.MachineBindings != null && Node.Recipe.MachineBindings.Count > 1)
+            {
+                <div class="tier-controls">
+                    <!-- Rétrograder (machine de palier inférieur) -->
+                    <button class="btn-tier" 
+                            disabled="@(!Node.CanDowngrade)" 
+                            title="Rétrograder la machine" 
+                            @onclick="DowngradeMachine">▼</button>
+
+                    <!-- Améliorer (machine de palier supérieur) -->
+                    <button class="btn-tier" 
+                            disabled="@(!Node.CanUpgrade)" 
+                            title="Améliorer la machine" 
+                            @onclick="UpgradeMachine">▲</button>
+                </div>
+            }
+
 
         </div>
 
         <!-- Conteneur poussé tout à droite -->
         <div class="header-actions">
-            <!-- 1. Sélecteur de quantité -->
+            <!-- 1. Multiplicateur de bâtiments -->
             <div class="multiplier-controls">
                 <button class="btn-step" @onclick="DecreaseCount">-</button>
                 <span class="multiplier-count">@Node.Multiplier.ToString("0.##")x</span>
                 <button class="btn-step" @onclick="IncreaseCount">+</button>
             </div>
-            <!-- 2. Croix rouge immédiatement à sa droite -->
+            <!-- 2. Croix rouge immédiatement à sa droite Bouton supprimer -->
             <button class="btn-delete" title="Supprimer la machine" @onclick="DeleteNode">✕</button>
         </div>
     </div>
@@ -103,7 +129,6 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
 
         <!-- Centre : Icône machine -->
-        <!-- Centre : Image de la machine issue du JSON -->
         <div class="machine-center-icon">
             <MudTooltip Text="@MachineTooltip" Arrow="true" Placement="Placement.Top">
                 <div class="building-icon-wrapper">
@@ -209,19 +234,31 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
         user-select: none;
     }
+
     .machine-card.selected {
         border-color: #3b82f6;
     }
+
     .machine-header {
-        background: #18181b;
-        padding: 6px 8px 6px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #1f1f23;
+        padding: 6px 10px;
         border-top-left-radius: 6px;
         border-top-right-radius: 6px;
-        display: flex;
-        justify-content: space-between; /* Pousse le titre à gauche et les actions à droite */
-        align-items: center;
         border-bottom: 1px solid #3f3f46;
     }
+
+    .machine-title {
+        font-weight: 600;
+        font-size: 0.82rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 140px;
+    }
+
     /* 2. Organisation du corps de la machine */
     .machine-body {
         display: flex;
@@ -232,21 +269,63 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         width: 100%;
     }
 
+    /* Style des boutons Upgrade / Downgrade */
+    /* Conteneur des flèches : décalé vers la droite avec une marge gauche */
+    .tier-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        border-radius: 4px;
+        padding: 2px 3px;
+        margin-left: 8px;
+    }
+
+    .btn-tier {
+        background: transparent;
+        color: #38bdf8;
+        border: none;
+        cursor: pointer;
+        font-size: 0.80rem;
+        line-height: 1;
+        width: 18px;      
+        height: 20px;     
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: 3px;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-tier:hover:not(:disabled) {
+        background: #38bdf822;
+        color: #7dd3fc;
+    }
+
+    .btn-tier:disabled {
+        color: #52525b;
+        cursor: not-allowed;
+    }
+
     .header-actions {
         display: flex;
         align-items: center;
         gap: 8px; /* Espace net entre le sélecteur et la croix */
         margin-left: auto; /* Force l'alignement tout à droite */
     }
-    .machine-title {
-        font-weight: 600;
-        font-size: 0.85rem;
-    }
+
     .multiplier-controls {
         display: flex;
         align-items: center;
         gap: 6px;
+        background: #27272a;
+        padding: 2px 4px;
+        border-radius: 4px;
+        border: 1px solid #3f3f46;
     }
+
     .btn-step {
         background: #3f3f46;
         border: none;
@@ -261,9 +340,11 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         justify-content: center;
         font-weight: bold;
     }
+
     .btn-step:hover {
         background: #52525b;
     }
+
     .btn-delete {
         background: transparent;
         border: none;
@@ -280,16 +361,19 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         line-height: 1;
         padding: 0;
     }
+
     .btn-delete:hover {
         background: rgba(239, 68, 68, 0.2);
         color: #f87171;
     }
+
     .multiplier-count {
         font-size: 0.8rem;
         min-width: 32px;
         text-align: center;
         color: #60a5fa;
     }
+
     /* 3. Colonnes d'entrées et de sorties : LARGEUR STRICTE ET IDENTIQUE */
     .port-column {
         display: flex;
@@ -301,12 +385,15 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         flex-shrink: 0; /* Interdiction formelle de rétrécir */
         box-sizing: border-box;
     }
+
     .port-column.inputs {
         padding-left: 0;
     }
+
     .port-column.outputs {
         padding-right: 0;
     }
+
     /* 4. Les lignes de ports */
     .port-row {
         display: flex;
@@ -315,12 +402,15 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         width: 100%;
         box-sizing: border-box;
     }
+
     .input-row {
         padding-left: 0;
     }
+
     .output-row {
         justify-content: flex-end;
     }
+
     .diagram-port {
         width: 12px;
         height: 12px;
@@ -329,6 +419,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         border-radius: 50%;
         cursor: crosshair;
     }
+
     /* 6. Le centre : parfaitement figé */
     .machine-center-icon {
         display: flex;
@@ -338,6 +429,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         min-width: 60px;
         flex-shrink: 0;
     }
+
     .building-icon-wrapper {
         width: 60px;  /* Augmenté (ex: de 44px à 60px) */
         height: 60px; /* Augmenté (ex: de 44px à 60px) */
@@ -351,6 +443,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         user-select: none;          /*     */
         -webkit-user-drag: none;    /*     */
     }
+
     .building-icon {
         width: 100%;
         height: 100%;
@@ -359,6 +452,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         -webkit-user-drag: none;    /* Désactive le glisser natif sous Chrome/Edge/Safari */
         user-select: none;
     }
+
     .building-fallback {
         width: 100%;
         height: 100%;
@@ -367,6 +461,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         justify-content: center;
         pointer-events: none;       /* Empêche l'icône de secours de capturer le clic */
     }
+
     /* 5. Conteneur de débit */
     .rate-stack {
         display: flex;
@@ -378,22 +473,26 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         min-width: 65px;
         flex-shrink: 0;
     }
+
     .text-right {
         text-align: right;
         align-items: flex-end;
     }
+
     /* Ligne 1 : Débit théorique (Gris) */
     .rate-theoretical {
         color: #9ca3af !important; /* Gris clair neutre */
         font-size: 0.70rem;
         white-space: nowrap !important; /* Empêche tout retour à la ligne automatique */
     }
+
     .rate-base {
         color: #6b7280;
         font-size: 0.62rem;
         font-weight: normal;
         opacity: 0.85;
     }
+
     /* Ligne 2 : Débit actuel réel */
     .rate-actual {
         font-size: 0.72rem;
@@ -437,12 +536,37 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
     [Parameter] public MachineNodeModel Node { get; set; } = default!;
 
 
+    // Identifiant de la machine sélectionnée
+    private string MachineId => Node.CurrentMachineId;
+
+    // Entité Machine correspondante dans le service
+    private Machine? CurrentMachine => ResourceService.GetMachine(MachineId);
+
+    // Titre affiché dans l'en-tête (Machine.Name)
+    private string MachineDisplayName => CurrentMachine?.Name ?? MachineId;
+
+    private string MachineImagePath
+    {
+        get
+        {
+            var path = !string.IsNullOrWhiteSpace(CurrentMachine?.Image)
+                ? CurrentMachine.Image
+                : $"images/buildings/{MachineId}.png";
+
+            return path.TrimStart('/');
+        }
+    }
+
+    private string MachineTooltip => CurrentMachine?.Name ?? MachineId;
+
+
     private void IncreaseCount()
     {
         Node.Multiplier += 1m;
         //Node.Refresh();
         FlowEngine.RecalculateFlows(Diagram);
     }
+
 
     private void DecreaseCount()
     {
@@ -454,34 +578,29 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         }
     }
 
+
+    private void UpgradeMachine()
+    {
+        if (Node.Upgrade())
+        {
+            FlowEngine.RecalculateFlows(Diagram);
+        }
+    }
+
+
+    private void DowngradeMachine()
+    {
+        if (Node.Downgrade())
+        {
+            FlowEngine.RecalculateFlows(Diagram);
+        }
+    }
+
+
     private void DeleteNode()
     {
         Diagram.Nodes.Remove(Node);
     }
-
-    
-    // 1. Identifie la machine liée à la recette
-    private string MachineId =>
-    Node.Recipe.MachineBindings?.FirstOrDefault()?.MachineId ?? string.Empty;
-
-    // 2. Récupère l'objet Machine depuis le service
-    private Machine? CurrentMachine => ResourceService.GetMachine(MachineId);
-
-    // 3. Utilise directement la propriété "Image" du JSON (ex: "/images/buildings/BakingUnit.png")
-    private string MachineImagePath
-    {
-        get
-        {
-            var path = !string.IsNullOrWhiteSpace(CurrentMachine?.Image)
-                ? CurrentMachine.Image
-                : $"images/buildings/{MachineId}.png";
-
-            // TrimStart('/') permet d'éviter les erreurs de base-path selon l'hébergement Blazor
-            return path.TrimStart('/');
-        }
-    }
-
-    private string MachineTooltip => CurrentMachine?.Name ?? MachineId;
 
 
     private void OnRightClick()
