@@ -42,6 +42,7 @@
                              Placeholder="Rechercher ou choisir un produit..."
                              SearchFunc="@SearchProducts"
                              ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                             Value="_selectedProduct"
                              ValueChanged="@OnProductSelected"
                              Clearable="true"
                              ResetValueOnEmptyText="true"
@@ -340,7 +341,7 @@
 
     // Stocke la liste brute de tous les produits pour alimenter la recherche
     private List<Product> _allProducts = new();
-
+    private Product? _selectedProduct;
 
 
     private ResourceFilterMode _filterMode = ResourceFilterMode.All;
@@ -375,6 +376,7 @@
             };
         });
 
+
     // private IEnumerable<Recipe>? FilteredRecipes =>
     // string.IsNullOrWhiteSpace(_searchQuery)
     //     ? Recipes
@@ -382,6 +384,7 @@
     //                           r.Inputs.Any(i => i.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
     //                           r.Outputs.Any(o => o.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
     
+
 
     // 1. Fonction de recherche asynchrone appelée à chaque frappe dans le champ
     private async Task<IEnumerable<Product>> SearchProducts(string value, CancellationToken token)
@@ -404,9 +407,13 @@
             .OrderBy(p => p.Name);
     }
 
+
     // 2. Déclenché lors du clic sur un produit suggéré ou lors de l'effacement
     private void OnProductSelected(Product? selected)
     {
+        // Met à jour manuellement la sélection puisque @bind-Value a été dissocié
+        _selectedProduct = selected;
+
         // Si un produit est sélectionné, on filtre sur son Id, sinon chaîne vide
         _searchQuery = selected?.Id ?? string.Empty;
     }
@@ -442,7 +449,7 @@
                     _allProducts = data.Products;
 
                     ProductDict = data.Products.ToDictionary(p => p.Id, p => p);
-                    ResourceService.Load(data.Products);
+                    ResourceService.LoadProducts(data.Products);
                 }
 
                 if (data.Machines != null)
@@ -533,6 +540,9 @@
         // Enregistre le rendu visuel de notre lien personnalisé
         Diagram.RegisterComponent<ResourceLinkModel, ResourceLinkWidget>();
 
+        // Abonne la page à la sélection de ressource venant d'une machine
+        ResourceService.OnResourceFilterRequested += HandleResourceFilterRequested;
+
         // Deux nœuds initiaux
         if (Recipes != null && Recipes.Count >= 2)
         {
@@ -542,10 +552,12 @@
         }
     }
 
+
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
     }
+
 
     private void AddRecipeNode(Recipe recipe)
     {
@@ -556,6 +568,7 @@
 
         Diagram.Nodes.Add(node);
     }
+
 
     private void HandleKeyDown(KeyboardEventArgs e)
     {
@@ -576,5 +589,38 @@
             }
         }
     }
+
+
+
+    // Méthode appelée quand l'utilisateur clique sur une ressource dans une machine
+    private void HandleResourceFilterRequested(string productId)
+    {
+        // 1. Ouvre le tiroir à gauche si jamais il était fermé
+        _drawerOpen = true;
+
+        // 2. Trouve le produit correspondant pour l'autocomplétion
+        if (ProductDict.TryGetValue(productId, out var product))
+        {
+            _selectedProduct = product;
+            _searchQuery = product.Id; // Filtre les recettes sur l'Id de la ressource cliquée
+        }
+        else
+        {
+            _selectedProduct = null;
+            _searchQuery = productId;
+        }
+
+        // 3. Demande à Blazor de recalculer FilteredRecipes et de rafraîchir l'affichage
+        InvokeAsync(StateHasChanged);
+    }
+
+
+
+    // Nettoyage de l'événement lors de la destruction du composant
+    public void Dispose()
+    {
+        ResourceService.OnResourceFilterRequested -= HandleResourceFilterRequested;
+    }
+
 
 }

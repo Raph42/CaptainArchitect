@@ -4,7 +4,8 @@
 @inject ResourceService ResourceService
 
 <MudTooltip Text="@TooltipText" Placement="Placement.Top" Arrow="true">
-    <div class="resource-badge">
+    <!-- Ajout de l'événement @onclick et d'un curseur pointeur -->
+    <div class="resource-badge" @onclick="OnClickBadge" @onclick:stopPropagation="true">
         <img src="@ImagePath" 
              alt="@TooltipText" 
              class="resource-icon"
@@ -30,11 +31,13 @@
         background: #1e1e1e;
         border: 1px solid #444;
         padding: 2px;
-        cursor: pointer;
+        cursor: pointer; /* Indique clairement que c'est cliquable */
+        transition: transform 0.1s ease, border-color 0.2s ease;
     }
 
     .resource-badge:hover {
         border-color: #3b82f6;
+        transform: scale(1.1); /* Petit zoom sympa au survol */
     }
 
     .resource-icon {
@@ -56,14 +59,17 @@
 
 
 @code {
-    [Parameter] public string ProductId { get; set; } = string.Empty;
-    [Parameter] public string? ResourceId { get; set; }
+    [Parameter, EditorRequired] public string ProductId { get; set; } = string.Empty;
+    //[Parameter] public string? ResourceId { get; set; }
 
     // Utilise ProductId ou se rabat sur ResourceId si le menu utilise encore l'ancien nom
-    private string EffectiveId =>
-        !string.IsNullOrWhiteSpace(ProductId) ? ProductId : (ResourceId ?? string.Empty);
+    // private string EffectiveId =>
+    //     !string.IsNullOrWhiteSpace(ProductId) ? ProductId : (ResourceId ?? string.Empty);
 
-    private Product? Prod => ResourceService.GetProduct(EffectiveId);
+    // private Product? Prod => ResourceService.GetProduct(EffectiveId);
+
+    private Product? Prod => ResourceService.GetProduct(ProductId);
+
 
     // 1. Image : utilise le chemin exact défini dans le JSON, ou repli par défaut
     private string ImagePath
@@ -72,7 +78,7 @@
         {
             var path = !string.IsNullOrWhiteSpace(Prod?.Image)
                 ? Prod.Image
-                : $"images/resources/{EffectiveId}.png";
+                : $"images/resources/{ProductId}.png";
 
             // Supprime le slash initial éventuel pour rester relatif à la base du site
             return path.TrimStart('/');
@@ -86,5 +92,11 @@
     // 3. Trois premières lettres pour le secours
     private string FallbackName =>
         (Prod?.Name ?? ProductId).Substring(0, Math.Min(3, (Prod?.Name ?? ProductId).Length));
+
+    // Déclenché au clic sur l'icône de la ressource
+    private void OnClickBadge()
+    {
+        ResourceService.SelectFilterResource(ProductId);
+    }
 
 }

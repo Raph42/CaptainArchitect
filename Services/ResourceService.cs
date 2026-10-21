@@ -10,8 +10,22 @@ public class ResourceService
     private readonly Dictionary<string, Product> _products = new();
     private readonly Dictionary<string, Machine> _machines = new();
 
+    // Événement déclenché lors du clic sur une ressource dans le diagramme
+    public event Action<string>? OnResourceFilterRequested;
+
+
+    // Déclenche l'événement pour demander le filtrage à gauche
+    public void SelectFilterResource(string productId)
+    {
+        if (!string.IsNullOrWhiteSpace(productId))
+        {
+            OnResourceFilterRequested?.Invoke(productId);
+        }
+    }
+
+
     // Chargement des produits
-    public void Load(IEnumerable<Product> products)
+    public void LoadProducts(IEnumerable<Product> products)
     {
         _products.Clear();
         foreach (var p in products)
@@ -19,6 +33,7 @@ public class ResourceService
             _products[p.Id] = p;
         }
     }
+
 
     // Chargement des machines
     public void LoadMachines(IEnumerable<Machine> machines)
@@ -29,6 +44,7 @@ public class ResourceService
             _machines[m.Id] = m;
         }
     }
+
 
     public Product? GetProduct(string productId) =>
         _products.TryGetValue(productId, out var prod) ? prod : null;
