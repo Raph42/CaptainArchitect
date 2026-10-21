@@ -10,12 +10,12 @@ public class ResourceService
     private readonly Dictionary<string, Product> _products = new();
     private readonly Dictionary<string, Machine> _machines = new();
 
-    // Événement recevant l'Id du produit et la direction du port cliqué
-    public event Action<string, PortDirection>? OnResourceFilterRequested;
+    // 1. Rend la direction nullable (?): si null, c'est un clic depuis le panneau de gauche
+    public event Action<string, PortDirection?>? OnResourceFilterRequested;
 
 
-    // Déclenché au clic : transmet le ProductId et sa direction (Input / Output)
-    public void SelectFilterResource(string productId, PortDirection direction)
+    // 2. direction a une valeur par défaut null
+    public void SelectFilterResource(string productId, PortDirection? direction = null)
     {
         if (!string.IsNullOrWhiteSpace(productId))
         {
@@ -23,7 +23,7 @@ public class ResourceService
         }
     }
 
-
+        
     // Chargement des produits
     public void LoadProducts(IEnumerable<Product> products)
     {

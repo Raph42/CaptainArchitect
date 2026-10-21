@@ -460,14 +460,15 @@
 
     // 4. Clic sur une ressource posée sur le diagramme
     // Méthode appelée lors du clic sur une ressource d'une machine posée
-    private void HandleResourceFilterRequested(string productId, PortDirection direction)
+    private void HandleResourceFilterRequested(string productId, PortDirection? direction)
     {
         // 1. Ouvre le tiroir à gauche si jamais il était fermé
         _drawerOpen = true;
 
-        // 2. Inverse la sélection du filtre :
-        // Si clic sur Sortie -> filtre sur Entrées
-        // Si clic sur Entrée -> filtre sur Sorties
+        // 2. Gestion du mode de filtre :
+        // - Si clic sur Sortie d'une machine posée -> filtre sur Entrées
+        // - Si clic sur Entrée d'une machine posée -> filtre sur Sorties
+        // - Si clic dans la liste du panneau (direction == null) -> passe en mode Tout
         _filterMode = direction switch
         {
             PortDirection.Output => ResourceFilterMode.Input,

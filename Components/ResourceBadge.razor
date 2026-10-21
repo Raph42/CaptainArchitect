@@ -96,11 +96,10 @@
     // Déclenché au clic sur l'icône de la ressource
     private void OnClickBadge()
     {
-        if (Direction.HasValue)
-        {
-            // Transmet la direction si le badge est sur une machine posée
-            ResourceService.SelectFilterResource(EffectiveId, Direction.Value);
-        }
+        // On transmet toujours le clic :
+        // - Si Direction a une valeur (badge sur une machine), elle est transmise
+        // - Si Direction est null (badge dans le panneau latéral), null est transmis
+        ResourceService.SelectFilterResource(EffectiveId, Direction);
     }
 
 }
