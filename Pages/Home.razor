@@ -1,6 +1,7 @@
 ﻿@page "/"
 @inject HttpClient Http
 @inject ResourceService ResourceService
+@implements IDisposable
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Options
 @using Blazor.Diagrams.Core.Anchors;
@@ -458,13 +459,23 @@
 
 
     // 4. Clic sur une ressource posée sur le diagramme
-    // Méthode appelée quand l'utilisateur clique sur une ressource dans une machine
-    private void HandleResourceFilterRequested(string productId)
+    // Méthode appelée lors du clic sur une ressource d'une machine posée
+    private void HandleResourceFilterRequested(string productId, PortDirection direction)
     {
         // 1. Ouvre le tiroir à gauche si jamais il était fermé
         _drawerOpen = true;
 
-        // 2. Trouve le produit correspondant pour l'autocomplétion
+        // 2. Inverse la sélection du filtre :
+        // Si clic sur Sortie -> filtre sur Entrées
+        // Si clic sur Entrée -> filtre sur Sorties
+        _filterMode = direction switch
+        {
+            PortDirection.Output => ResourceFilterMode.Input,
+            PortDirection.Input => ResourceFilterMode.Output,
+            _ => ResourceFilterMode.All
+        };
+
+        // 3. Applique le produit cliqué dans la recherche
         if (ProductDict.TryGetValue(productId, out var product))
         {
             _selectedProduct = product;
@@ -605,7 +616,7 @@
         // Enregistre le rendu visuel de notre lien personnalisé
         Diagram.RegisterComponent<ResourceLinkModel, ResourceLinkWidget>();
 
-        // Abonne la page à la sélection de ressource venant d'une machine
+        // Abonnement à l'événement avec les 2 paramètres (Id et Direction)
         ResourceService.OnResourceFilterRequested += HandleResourceFilterRequested;
 
         // Deux nœuds initiaux

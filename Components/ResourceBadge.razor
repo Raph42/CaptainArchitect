@@ -60,13 +60,13 @@
 
 @code {
     [Parameter, EditorRequired] public string ProductId { get; set; } = string.Empty;
-    //[Parameter] public string? ResourceId { get; set; }
+    [Parameter] public string? ResourceId { get; set; }
 
-    // Utilise ProductId ou se rabat sur ResourceId si le menu utilise encore l'ancien nom
-    // private string EffectiveId =>
-    //     !string.IsNullOrWhiteSpace(ProductId) ? ProductId : (ResourceId ?? string.Empty);
+    // Direction du port (Input ou Output). Null si affiché dans le tiroir de gauche
+    [Parameter] public PortDirection? Direction { get; set; }
 
-    // private Product? Prod => ResourceService.GetProduct(EffectiveId);
+    private string EffectiveId => 
+        !string.IsNullOrWhiteSpace(ProductId) ? ProductId : (ResourceId ?? string.Empty);
 
     private Product? Prod => ResourceService.GetProduct(ProductId);
 
@@ -96,7 +96,11 @@
     // Déclenché au clic sur l'icône de la ressource
     private void OnClickBadge()
     {
-        ResourceService.SelectFilterResource(ProductId);
+        if (Direction.HasValue)
+        {
+            // Transmet la direction si le badge est sur une machine posée
+            ResourceService.SelectFilterResource(EffectiveId, Direction.Value);
+        }
     }
 
 }

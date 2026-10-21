@@ -10,16 +10,16 @@ public class ResourceService
     private readonly Dictionary<string, Product> _products = new();
     private readonly Dictionary<string, Machine> _machines = new();
 
-    // Événement déclenché lors du clic sur une ressource dans le diagramme
-    public event Action<string>? OnResourceFilterRequested;
+    // Événement recevant l'Id du produit et la direction du port cliqué
+    public event Action<string, PortDirection>? OnResourceFilterRequested;
 
 
-    // Déclenche l'événement pour demander le filtrage à gauche
-    public void SelectFilterResource(string productId)
+    // Déclenché au clic : transmet le ProductId et sa direction (Input / Output)
+    public void SelectFilterResource(string productId, PortDirection direction)
     {
         if (!string.IsNullOrWhiteSpace(productId))
         {
-            OnResourceFilterRequested?.Invoke(productId);
+            OnResourceFilterRequested?.Invoke(productId, direction);
         }
     }
 

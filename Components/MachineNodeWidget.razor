@@ -90,7 +90,8 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
                     <div class="port-row input-row">
                         <PortRenderer Port="port" Class="diagram-port" />
-                        <ResourceBadge ProductId="@input.ProductId" />
+
+                        <ResourceBadge ProductId="@input.ProductId" Direction="PortDirection.Input" />
 
                         <div class="rate-stack">
                             @* Ligne 1 : Débit théorique total + Débit de base si Multiplier > 1 *@
@@ -210,7 +211,9 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                                 </span>
                             }
                         </div>
-                        <ResourceBadge ProductId="@output.ProductId" />
+
+                        <ResourceBadge ProductId="@output.ProductId" Direction="PortDirection.Output" />
+
                         <PortRenderer Port="port" Class="diagram-port" />
                     </div>
                 }
