@@ -46,7 +46,7 @@
                              ValueChanged="@OnProductSelected"
                              Clearable="true"
                              ResetValueOnEmptyText="true"
-                             CoerceText="true"
+                             CoerceText="false"
                              CoerceValue="false"
                              Dense="true"
                              Variant="Variant.Outlined"
@@ -54,6 +54,8 @@
                              Adornment="Adornment.Start"
                              AdornmentIcon="@Icons.Material.Filled.Search"
                              MaxItems="300"
+                             SelectValueOnTab="false"
+                             @onkeyup="HandleSearchKeyDown"
                              Class="mb-2 search-autocomplete"
                              PopoverClass="autocomplete-popover-dark">
 
@@ -336,65 +338,81 @@
     private Dictionary<string, Product> ProductDict { get; set; } = new();
 
     private bool _drawerOpen = true;
+
+    // Variable contenant le texte effectif qui filtre la liste des recettes
     private string _searchQuery = "";
+    // Mémorise le texte tapé au fur et à mesure sans déclencher le re-filtrage lourd des recettes
+    private string _currentSearchText = "";
+
     private double _spawnOffset = 150;
 
     // Stocke la liste brute de tous les produits pour alimenter la recherche
     private List<Product> _allProducts = new();
     private Product? _selectedProduct;
 
-
     private ResourceFilterMode _filterMode = ResourceFilterMode.All;
 
+    // Propriété de filtrage des recettes
     private IEnumerable<Recipe>? FilteredRecipes =>
         Recipes?.Where(r =>
         {
-            // 1. Si la barre de recherche est vide, on affiche tout le catalogue
-            if (string.IsNullOrWhiteSpace(_searchQuery))
+            // 1. Si aucun texte n'est validé et aucun produit sélectionné, on affiche tout
+            if (string.IsNullOrWhiteSpace(_searchQuery) && _selectedProduct == null)
                 return true;
 
             var query = _searchQuery.Trim();
 
-            // 2. Vérification ciblée sur les entrées et les sorties
-            bool matchesInput = r.Inputs.Any(i =>
-                !string.IsNullOrWhiteSpace(i.ProductId) &&
-                i.ProductId.Contains(query, StringComparison.OrdinalIgnoreCase));
+            // 2. Critère de correspondance :
+            // - Si un produit précis a été cliqué dans la liste ou sur une machine -> Égalité stricte sur son Id
+            // - Sinon (recherche validée par Entrée) -> Recherche souple avec Contains (Iron trouvera Iron, IronOre, IronScrap...)
+            Func<string?, bool> matchesCriteria = (productId) =>
+            {
+                if (string.IsNullOrWhiteSpace(productId)) return false;
 
-            bool matchesOutput = r.Outputs.Any(o =>
-                !string.IsNullOrWhiteSpace(o.ProductId) &&
-                o.ProductId.Contains(query, StringComparison.OrdinalIgnoreCase));
+                if (_selectedProduct != null)
+                {
+                    // Égalité exacte : seulement le produit sélectionné
+                    return string.Equals(productId, _selectedProduct.Id, StringComparison.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    // Recherche large par sous-chaîne sur l'ID
+                    return productId.Contains(query, StringComparison.OrdinalIgnoreCase);
+                }
+            };
 
-            // 3. Correspondance sur le nom de la recette uniquement utile en mode "Tout"
-            bool matchesName = r.RecipeId.Contains(query, StringComparison.OrdinalIgnoreCase);
 
-            // 4. Filtrage strict selon le mode sélectionné
+            // 3. Vérification sur les entrées et les sorties
+            bool matchesInput = r.Inputs.Any(i => matchesCriteria(i.ProductId));
+            bool matchesOutput = r.Outputs.Any(o => matchesCriteria(o.ProductId));
+
+            // 4. Correspondance sur le nom de la recette (uniquement en saisie manuelle et mode Tout)
+            bool matchesName = _selectedProduct == null &&
+                               r.RecipeId.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+            // 5. Filtrage selon le mode sélectionné (Tout / Entrées / Sorties)
             return _filterMode switch
             {
                 ResourceFilterMode.Input => matchesInput,
                 ResourceFilterMode.Output => matchesOutput,
                 _ => matchesName || matchesInput || matchesOutput
             };
+
         });
 
 
-    // private IEnumerable<Recipe>? FilteredRecipes =>
-    // string.IsNullOrWhiteSpace(_searchQuery)
-    //     ? Recipes
-    //     : Recipes?.Where(r => r.RecipeId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-    //                           r.Inputs.Any(i => i.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-    //                           r.Outputs.Any(o => o.ProductId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)));
-    
 
-
-    // 1. Fonction de recherche asynchrone appelée à chaque frappe dans le champ
+    // 1. Fonction appelée à chaque frappe pour filtrer le menu déroulant de l'autocomplétion
     private async Task<IEnumerable<Product>> SearchProducts(string value, CancellationToken token)
     {
-        // Met à jour la chaîne globale pour que FilteredRecipes prenne en compte la frappe libre
-        _searchQuery = value ?? string.Empty;
+        // On mémorise la frappe SANS toucher à _searchQuery (supprime tout lag pendant la frappe !)
+        _currentSearchText = value ?? string.Empty;
 
-        // Si le champ est vide, retourne la liste complète triée par nom
+        // Si le champ est vidé, on efface aussi le filtre pour réafficher toutes les recettes
         if (string.IsNullOrWhiteSpace(value))
         {
+            _selectedProduct = null;
+            _searchQuery = string.Empty;
             return _allProducts.OrderBy(p => p.Name);
         }
 
@@ -405,20 +423,68 @@
             .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
                         (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(term, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(p => p.Name);
+
     }
 
 
-    // 2. Déclenché lors du clic sur un produit suggéré ou lors de l'effacement
+
+    // 2. Déclenché UNIQUEMENT quand vous cliquez sur un produit dans le menu déroulant
     private void OnProductSelected(Product? selected)
     {
-        // Met à jour manuellement la sélection puisque @bind-Value a été dissocié
         _selectedProduct = selected;
-
-        // Si un produit est sélectionné, on filtre sur son Id, sinon chaîne vide
         _searchQuery = selected?.Id ?? string.Empty;
+        _currentSearchText = selected?.Name ?? string.Empty;
     }
 
-    // 3. Calcule le chemin de l'image en nettoyant le slash initial éventuel
+
+
+    // 3. Gère la validation par la touche Entrée dans la barre de recherche
+    private void HandleSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+        {
+            // En validant par Entrée sans avoir cliqué sur un produit précis :
+            // 1. On annule la sélection stricte d'un produit unique
+            _selectedProduct = null;
+
+            // 2. On applique le texte saisi comme filtre global (partiel)
+            _searchQuery = _currentSearchText;
+
+            // 3. Rafraîchit instantanément la liste des recettes filtrées
+            StateHasChanged();
+        }
+    }
+
+
+
+    // 4. Clic sur une ressource posée sur le diagramme
+    // Méthode appelée quand l'utilisateur clique sur une ressource dans une machine
+    private void HandleResourceFilterRequested(string productId)
+    {
+        // 1. Ouvre le tiroir à gauche si jamais il était fermé
+        _drawerOpen = true;
+
+        // 2. Trouve le produit correspondant pour l'autocomplétion
+        if (ProductDict.TryGetValue(productId, out var product))
+        {
+            _selectedProduct = product;
+            _searchQuery = product.Id;
+            _currentSearchText = product.Name;
+        }
+        else
+        {
+            _selectedProduct = null;
+            _searchQuery = productId;
+            _currentSearchText = productId;
+        }
+
+        // 3. Demande à Blazor de recalculer FilteredRecipes et de rafraîchir l'affichage
+        InvokeAsync(StateHasChanged);
+    }
+
+
+
+    // Calcule le chemin de l'image en nettoyant le slash initial éventuel
     private string GetProductImagePath(Product? prod)
     {
         if (prod == null) return string.Empty;
@@ -429,7 +495,6 @@
 
         return path.TrimStart('/');
     }
-
 
 
 
@@ -588,30 +653,6 @@
                 Diagram.Nodes.Remove(node);
             }
         }
-    }
-
-
-
-    // Méthode appelée quand l'utilisateur clique sur une ressource dans une machine
-    private void HandleResourceFilterRequested(string productId)
-    {
-        // 1. Ouvre le tiroir à gauche si jamais il était fermé
-        _drawerOpen = true;
-
-        // 2. Trouve le produit correspondant pour l'autocomplétion
-        if (ProductDict.TryGetValue(productId, out var product))
-        {
-            _selectedProduct = product;
-            _searchQuery = product.Id; // Filtre les recettes sur l'Id de la ressource cliquée
-        }
-        else
-        {
-            _selectedProduct = null;
-            _searchQuery = productId;
-        }
-
-        // 3. Demande à Blazor de recalculer FilteredRecipes et de rafraîchir l'affichage
-        InvokeAsync(StateHasChanged);
     }
 
 
