@@ -37,6 +37,48 @@
                 <MudText Typo="Typo.h6">Recettes COI</MudText>
             </MudDrawerHeader>
 
+
+            <!-- HISTORIQUE DES DERNIÈRES RECHERCHES -->
+            @if (_recentProducts.Count > 0)
+            {
+                <div class="mb-2">
+                    <!-- Titre compact pour l'historique -->
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1 fw-bold">
+                        Dernières recherches :
+                    </MudText>
+
+                    <!-- Bandeau horizontal défilant avec les icônes -->
+                    <div class="d-flex align-center gap-1 overflow-x-auto pb-1 recent-search-bar">
+                        
+                        @foreach (var prod in _recentProducts)
+                        {
+                            <!-- 1. key force Blazor à recréer l'élément sans garder l'état d'erreur du précédent -->
+                            <div @key="prod.Id"
+                                 class="recent-item-badge"
+                                 @onclick="@(() => SelectRecentProduct(prod))"
+                                 title="@prod.Name">
+
+                                <!-- 2. Image avec onload pour réinitialiser le display et repli vers la lettre/texte -->
+                                <img src="@GetProductImagePath(prod)"
+                                        alt="@prod.Name"
+                                        class="recent-item-icon"
+                                        onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';"
+                                        onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+                                
+                                <!-- 3. Repli : affiche les 2-3 lettres si l'image est introuvable -->
+                                <span class="recent-item-fallback" style="display: none;">
+                                    @GetShortFallbackName(prod)
+                                </span>
+                                     
+                            </div>
+
+                        }
+
+                    </div>
+                </div>
+            }
+
+
             <!-- Barre de recherche -->
             <!-- Sélecteur / Barre de recherche avec autocomplétion des produits -->
             <MudAutocomplete T="Product"
@@ -239,6 +281,64 @@
         font-weight: 600;
     }
 
+    /* Conteneur défilant horizontalement pour les dernières recherches */
+    .recent-search-bar {
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
+    }
+
+    .recent-search-bar::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .recent-search-bar::-webkit-scrollbar-thumb {
+        background-color: #555;
+        border-radius: 4px;
+    }
+
+    /* Vignette individuelle d'icône d'historique */
+    .recent-item-badge {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        border-radius: 4px;
+        background-color: #1e1e1e;
+        border: 1px solid #444;
+        padding: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.1s ease, border-color 0.2s ease;
+    }
+
+    .recent-item-badge:hover {
+        border-color: #38bdf8;
+        transform: scale(1.15);
+    }
+
+    .recent-item-icon {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        user-select: none;
+        -webkit-user-drag: none;
+    }
+
+    /* Style du texte de secours (2-3 lettres) dans les vignettes d'historique */
+    .recent-item-fallback {
+        font-size: 0.60rem;
+        font-weight: 700;
+        color: #e4e4e7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        user-select: none;
+        text-transform: uppercase;
+    }
 
     /* Style des courbes de connexion */
     /*.default-link path {
@@ -353,6 +453,10 @@
 
     private ResourceFilterMode _filterMode = ResourceFilterMode.All;
 
+    // Variables d'historique
+    private readonly List<Product> _recentProducts = new();
+    private const int MaxRecentSearches = 10;
+
     // Propriété de filtrage des recettes
     private IEnumerable<Recipe>? FilteredRecipes =>
         Recipes?.Where(r =>
@@ -435,6 +539,13 @@
         _selectedProduct = selected;
         _searchQuery = selected?.Id ?? string.Empty;
         _currentSearchText = selected?.Name ?? string.Empty;
+
+        // mémorise le produit sélectionné
+        if (selected != null)
+        {
+            AddToRecentSearches(selected);
+        }
+
     }
 
 
@@ -482,6 +593,9 @@
             _selectedProduct = product;
             _searchQuery = product.Id;
             _currentSearchText = product.Name;
+
+            // mémorise aussi le produit cliqué depuis le diagramme
+            AddToRecentSearches(product);
         }
         else
         {
@@ -506,6 +620,16 @@
             : $"images/resources/{prod.Id}.png";
 
         return path.TrimStart('/');
+    }
+
+
+
+    /// Calcule un texte court de secours (3 caractères max) si le produit n'a pas d'image
+    private string GetShortFallbackName(Product? prod)
+    {
+        if (prod == null) return string.Empty;
+        var text = !string.IsNullOrWhiteSpace(prod.Name) ? prod.Name : prod.Id;
+        return text.Substring(0, Math.Min(3, text.Length)).ToUpperInvariant();
     }
 
 
@@ -665,6 +789,46 @@
                 Diagram.Nodes.Remove(node);
             }
         }
+    }
+
+
+
+    // Ajoute un produit à l'historique :
+    // - S'il existe déjà : on le remet en tête de liste.
+    // - S'il n'existe pas : on l'insère à l'index 0.
+    // - Si la liste dépasse 10 éléments : on retire le plus ancien (le dernier).
+    private void AddToRecentSearches(Product? product)
+    {
+        if (product == null) return;
+
+        // Retrait de la position précédente si présent (dédoublonnage)
+        _recentProducts.RemoveAll(p => p.Id == product.Id);
+
+        // Insertion au tout début (le plus récent)
+        _recentProducts.Insert(0, product);
+
+        // Limitation stricte à 10 items maximum
+        if (_recentProducts.Count > MaxRecentSearches)
+        {
+            _recentProducts.RemoveAt(_recentProducts.Count - 1);
+        }
+    }
+
+
+
+    // Déclenché lors du clic sur une des icônes de la barre d'historique
+    private void SelectRecentProduct(Product product)
+    {
+        // 1. Réinjecte le produit dans la recherche
+        _selectedProduct = product;
+        _searchQuery = product.Id;
+        _currentSearchText = product.Name;
+
+        // 2. Remonte le produit cliqué en 1ère position dans l'historique
+        AddToRecentSearches(product);
+
+        // 3. Rafraîchit l'affichage
+        StateHasChanged();
     }
 
 
