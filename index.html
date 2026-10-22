@@ -8,7 +8,7 @@
     <!-- .github/workflows/deploy.yml   -->
     <!-- Pour remplacer <base href="/CaptainArchitect/" /> par <base href="/BlazorApp1/" /> directement dans le dossier publié -->
     <base href="" />
-    <link href="_framework/dotnet.1xbauh8bwn.js" rel="preload" as="script" fetchpriority="high" crossorigin="anonymous" integrity="sha256-1VyOHQb/fzBh0UL/WJpa0yiLe0+lI7ZFOCM75Y8JvNY=" />
+    <link href="_framework/dotnet.kec8y7dk7l.js" rel="preload" as="script" fetchpriority="high" crossorigin="anonymous" integrity="sha256-zJ6Dc6KWpSURxoPI/v9mQTGPOwgJRHfgCWNZ43pg5sg=" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -16,7 +16,7 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.1xbauh8bwn.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.kec8y7dk7l.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.q38003gvqi.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.azrfhwb804.js"
   },
@@ -24,8 +24,8 @@
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.1xbauh8bwn.js": "sha256-1VyOHQb/fzBh0UL/WJpa0yiLe0+lI7ZFOCM75Y8JvNY=",
-    "./_framework/dotnet.js": "sha256-1VyOHQb/fzBh0UL/WJpa0yiLe0+lI7ZFOCM75Y8JvNY=",
+    "./_framework/dotnet.js": "sha256-zJ6Dc6KWpSURxoPI/v9mQTGPOwgJRHfgCWNZ43pg5sg=",
+    "./_framework/dotnet.kec8y7dk7l.js": "sha256-zJ6Dc6KWpSURxoPI/v9mQTGPOwgJRHfgCWNZ43pg5sg=",
     "./_framework/dotnet.native.js": "sha256-BtUMevCTTpUK4I5d68LtBZlJdGIQC7fk+oNnjyzuFR4=",
     "./_framework/dotnet.native.q38003gvqi.js": "sha256-BtUMevCTTpUK4I5d68LtBZlJdGIQC7fk+oNnjyzuFR4=",
     "./_framework/dotnet.runtime.azrfhwb804.js": "sha256-muN076HgyOCoAaid7zD7a2/GN7aQ7tmK/BzdnKgw78g=",
@@ -61,6 +61,19 @@
 
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_content/Z.Blazor.Diagrams/script.min.js"></script>
+
+    <script>
+            // Déclenche le téléchargement d'un fichier texte / JSON dans le navigateur
+            window.downloadFileFromText = function (fileName, textContent) {
+                const blob = new Blob([textContent], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = fileName;
+                anchor.click();
+                URL.revokeObjectURL(url);
+            };
+    </script>
 
 </body>
 
