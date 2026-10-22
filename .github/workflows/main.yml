@@ -28,7 +28,7 @@ jobs:
 
     - name: Adjust base href for GitHub Pages
       # Remplacez NOM_DE_VOTRE_REPO par le nom exact de votre dépôt GitHub
-      run: sed -i 's/<base href="\/" \/>/<base href="\/BlazorApp1\/" \/>/g' release/wwwroot/index.html
+      run: sed -i 's/<base href="\/" \/>/<base href="\/CaptainArchitect\/" \/>/g' release/wwwroot/index.html
 
     - name: Add .nojekyll file
       # Indispensable pour éviter que GitHub Pages ignore les fichiers commençant par un underscore (comme _framework)
