@@ -28,7 +28,7 @@ jobs:
 
       # 4. Réécrire automatiquement la balise base href pour GitHub Pages
       - name: Rewrite base href
-        run: sed -i 's/<base href="\/" \/>/<base href="\/CaptainArchitect\/" \/>/g' release/wwwroot/index.html
+        run: sed -i 's/<base href="\/" \/>/<base href="\/BlazorApp1\/" \/>/g' release/wwwroot/index.html
 
       # 5. Créer un fichier .nojekyll (indispensable pour Blazor sur GitHub Pages)
       - name: Add .nojekyll
