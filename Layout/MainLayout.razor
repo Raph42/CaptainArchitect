@@ -1,15 +1,18 @@
 ﻿@inherits LayoutComponentBase
 
-<MudThemeProvider />
+<MudThemeProvider IsDarkMode="true" />
 <MudDialogProvider />
 <MudSnackbarProvider />
-<MudPopoverProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1">
-        <MudText Typo="Typo.h6">CaptainArchitect</MudText>
+<MudLayout Style="height: 100vh; width: 100vw; overflow: hidden; background-color: #18181b;">
+    <!-- Barre supérieure sombre unifiée -->
+    <MudAppBar Elevation="1" Dense="true" Style="background-color: #18181b; border-bottom: 1px solid #2d2d2d;">
+        <MudText Typo="Typo.h6" Class="fw-bold" Style="color: #38bdf8;">CaptainArchitect</MudText>
+        <MudSpacer />
     </MudAppBar>
-    <MudMainContent Class="p-4">
+
+    <!-- Zone principale occupant exactement l'espace sous la barre sans bordure blanche -->
+    <MudMainContent Class="pa-0 ma-0" Style="height: calc(100vh - 48px); overflow: hidden; background-color: #18181b;">
         @Body
     </MudMainContent>
 </MudLayout>

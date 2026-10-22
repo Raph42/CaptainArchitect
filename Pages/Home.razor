@@ -18,68 +18,83 @@
 @using CaptainArchitect.Components
 @using CaptainArchitect.Services
 
-<MudPaper Height="calc(100vh - 100px)" Width="100%" Class="relative overflow-hidden d-flex">
 
-    <!-- Bouton pour ouvrir/fermer le tiroir latéral -->
-    <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                   Color="Color.Inherit"
-                   OnClick="@ToggleDrawer"
-                   Class="drawer-toggle-btn" />
+<!-- Conteneur plein écran sombre sans marge ni débordement -->
+<div class="d-flex w-100 h-100 position-relative" style="background-color: #1e1e1e; overflow: hidden;">
 
+    <!-- Bouton flottant pour ouvrir le tiroir si replié -->
+    @if (!_drawerOpen)
+    {
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       OnClick="@ToggleDrawer"
+                       Class="drawer-toggle-btn"
+                       Title="Ouvrir le catalogue" />
+    }
 
     <!-- Tiroir latéral rétractable MudBlazor -->
     <MudDrawer @bind-Open="@_drawerOpen"
                ClipMode="DrawerClipMode.Never"
-               Elevation="3"
+               Elevation="4"
                Variant="@DrawerVariant.Responsive"
                Width="340px"
-               Class="pa-3 bg-dark-drawer d-flex flex-column"
-               Style="height: 100vh;">
+               Class="pa-3 bg-dark-drawer d-flex flex-column h-100"
+               Style="border-right: 1px solid #333; z-index: 200;">
 
-             
-               
-        <!-- 1. ZONE FIXE DU HAUT (Titre + Recherche + Filtres) -->
+        <!-- 1. ZONE FIXE DU HAUT -->
         <div style="flex-shrink: 0;">
-            <MudDrawerHeader Class="px-0 py-2">
-                <MudText Typo="Typo.h6">Recettes COI</MudText>
-            </MudDrawerHeader>
+            
+            <!-- En-tête : Titre + Bouton de fermeture -->
+            <div class="d-flex align-center justify-space-between mb-2">
+                <MudText Typo="Typo.subtitle1" Class="fw-bold" Style="color: #e4e4e7;">Catalogue Recettes</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
+                               Size="MudBlazor.Size.Small" 
+                               Color="Color.Default" 
+                               OnClick="@ToggleDrawer" 
+                               Title="Fermer le panneau" />
+            </div>
 
 
 
-        <!-- Boutons Sauvegarde & Chargement -->
-        <div class="d-flex align-center gap-2 mb-2">
-            <!-- Bouton d'exportation / téléchargement JSON -->
-            <MudButton Variant="Variant.Filled" 
-                       Color="Color.Primary" 
-                       StartIcon="@Icons.Material.Filled.Save" 
-                       Size="MudBlazor.Size.Small"
-                       OnClick="SaveDiagram">
-                Sauvegarder
-            </MudButton>
 
-            <!-- Bouton d'importation depuis un fichier JSON -->
-            <MudFileUpload T="IBrowserFile" 
-                           FilesChanged="LoadDiagram" 
-                           Accept=".json">
-                <ActivatorContent>
-                    <MudButton Variant="Variant.Outlined" 
-                               Color="Color.Secondary" 
-                               StartIcon="@Icons.Material.Filled.FolderOpen" 
-                               Size="MudBlazor.Size.Small">
-                        Charger
-                    </MudButton>
-                </ActivatorContent>
-            </MudFileUpload>
+            <!-- Barre d'outils Fichier compacte et harmonisée -->
+            <div class="toolbar-box mb-3 d-flex align-center justify-space-between px-2 py-1">
 
-            <!-- Bouton pour vider le canvas -->
-            <MudButton Variant="Variant.Text" 
-                       Color="Color.Error" 
-                       StartIcon="@Icons.Material.Filled.Clear" 
-                       Size="MudBlazor.Size.Small"
-                       OnClick="ClearDiagram">
-                Nouveau
-            </MudButton>
-        </div>
+                <!-- 1. Bouton Sauvegarder -->
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           Size="MudBlazor.Size.Small"
+                           Class="tool-btn"
+                           OnClick="SaveDiagram">
+                    Sauver
+                </MudButton>
+
+                <!-- 2. Bouton Charger : InputFile natif masqué + Bouton label propre -->
+                <InputFile id="fileInputLoader" OnChange="LoadDiagram" accept=".json" style="display: none;" />
+
+                <MudButton HtmlTag="label"
+                           Variant="Variant.Outlined"
+                           Color="Color.Info"
+                           StartIcon="@Icons.Material.Filled.FolderOpen"
+                           Size="MudBlazor.Size.Small"
+                           Class="tool-btn"
+                           for="fileInputLoader">
+                    Charger
+                </MudButton>
+
+                <!-- 3. Bouton Vider -->
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                           Size="MudBlazor.Size.Small"
+                           Class="tool-btn text-muted-hover"
+                           OnClick="ClearDiagram">
+                    Vider
+                </MudButton>
+            </div>
+
+
 
 
 
@@ -87,6 +102,7 @@
             @if (_recentProducts.Count > 0)
             {
                 <div class="mb-2">
+
                     <!-- Titre compact pour l'historique -->
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1 fw-bold">
                         Dernières recherches :
@@ -105,29 +121,26 @@
 
                                 <!-- 2. Image avec onload pour réinitialiser le display et repli vers la lettre/texte -->
                                 <img src="@GetProductImagePath(prod)"
-                                        alt="@prod.Name"
-                                        class="recent-item-icon"
-                                        onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';"
-                                        onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-                                
+                                     alt="@prod.Name"
+                                     class="recent-item-icon"
+                                     onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';"
+                                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+
                                 <!-- 3. Repli : affiche les 2-3 lettres si l'image est introuvable -->
                                 <span class="recent-item-fallback" style="display: none;">
                                     @GetShortFallbackName(prod)
                                 </span>
-                                     
+
                             </div>
-
                         }
-
                     </div>
                 </div>
             }
 
-
             <!-- Barre de recherche -->
             <!-- Sélecteur / Barre de recherche avec autocomplétion des produits -->
             <MudAutocomplete T="Product"
-                             Placeholder="Rechercher ou choisir un produit..."
+                             Placeholder="Rechercher un produit..."
                              SearchFunc="@SearchProducts"
                              ToStringFunc="@(p => p?.Name ?? string.Empty)"
                              Value="_selectedProduct"
@@ -150,17 +163,16 @@
                 <!-- Rendu personnalisé de chaque ligne dans la liste déroulante -->
                 <ItemTemplate Context="prod">
                     <div class="d-flex align-center gap-2 py-1">
+                        
                         <!-- Icône du produit avec gestion d'erreur d'affichage -->
                         <img src="@GetProductImagePath(prod)"
                              alt="@prod.Name"
                              style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;"
                              onerror="this.style.display='none';" />
-
+                        
                         <!-- Libellé du produit -->
                         <MudText Typo="Typo.body2">@prod.Name</MudText>
 
-                        <!-- Identifiant technique affiché discrètement -->
-                        <!-- <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ms-auto">@prod.Id</MudText> -->
                     </div>
                 </ItemTemplate>
 
@@ -171,30 +183,28 @@
 
             </MudAutocomplete>
 
-
-            <!-- Filtre Entrée / Sortie / Tout : placé DIRECTEMENT sous la recherche -->
+            <!-- Filtres : Tout / Entrées / Sorties -->
             <MudToggleGroup T="ResourceFilterMode"
                             @bind-Value="_filterMode"
                             Color="Color.Primary"
                             CheckMark="false"
                             FixedContent="true"
                             Size="MudBlazor.Size.Small"
-                            Class="mb-3 w-100 d-flex justify-center"
-                            Style="background-color: #1e1e1e; border: 1px solid #444; border-radius: 4px;">
-                <MudToggleItem Value="ResourceFilterMode.All" Text="Tout" Class="flex-grow-1" />
-                <MudToggleItem Value="ResourceFilterMode.Input" Text="Entrées" Class="flex-grow-1" />
-                <MudToggleItem Value="ResourceFilterMode.Output" Text="Sorties" Class="flex-grow-1" />
+                            Class="mb-3 w-100 d-flex justify-center mode-toggle-group">
+                <MudToggleItem Value="ResourceFilterMode.All" Text="Tout" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="ResourceFilterMode.Input" Text="Entrées" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="ResourceFilterMode.Output" Text="Sorties" Class="flex-grow-1 text-center" />
             </MudToggleGroup>
         </div>
 
-
-        <!-- 2. ZONE SCROLLABLE (Seule la liste défile) -->
+        <!-- 2. ZONE SCROLLABLE DE LA LISTE -->
         <div class="recipes-list flex-grow-1" style="overflow-y: auto; min-height: 0;">
             @if (FilteredRecipes != null)
             {
                 <Virtualize Items="@FilteredRecipes.ToList()" Context="recipe">
                     <MudCard Class="mb-2 recipe-card" Outlined="true">
                         <MudCardContent Class="pa-2">
+                            
                             <div class="d-flex justify-space-between align-center">
 
                                 <!-- Titre éclairci avec la classe recipe-title -->
@@ -241,16 +251,18 @@
             }
 
             else
+
             {
                 <MudProgressCircular Indeterminate="true" Size="MudBlazor.Size.Small" />
             }
 
         </div>
-
     </MudDrawer>
 
-    <!-- Zone principale : Diagramme -->
+
+    <!-- Zone principale : Diagramme Canvas prenant tout l'espace restant -->
     <div class="flex-grow-1 h-100 position-relative outline-none"
+         style="background-color: #1a1a1a;"
          tabindex="0" 
          @onkeydown="HandleKeyDown">
         @if (Diagram != null)
@@ -261,33 +273,64 @@
             </CascadingValue>
         }
     </div>
-</MudPaper>
+</div>
 
 
 <style>
+    /* Conteneur sombre des boutons d'action */
+    .toolbar-box {
+        background: #18181b;
+        border: 1px solid #333;
+        border-radius: 6px;
+        height: 42px;
+    }
+
+    .tool-btn {
+        font-size: 0.75rem !important;
+        text-transform: none !important;
+        padding: 3px 8px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+    }
+
+    /* Neutralise les styles parasites générés par MudFileUpload */
+    .file-upload-compact .mud-button-root {
+        margin: 0 !important;
+    }
+
+    /* Style du groupe Tout / Entrées / Sorties */
+    .mode-toggle-group {
+        background-color: #18181b !important;
+        border: 1px solid #333 !important;
+        border-radius: 4px;
+    }
+
     .diagram-container {
         width: 100%;
         height: 100%;
-        background-color: #1e1e1e;
-        background-image: radial-gradient(#333 1px, transparent 1px);
-        background-size: 20px 20px;
+        background-color: #18181b;
+        background-image: radial-gradient(#2e2e33 1px, transparent 1px);
+        background-size: 24px 24px;
     }
 
     .drawer-toggle-btn {
         position: absolute;
-        top: 10px;
-        left: 10px;
+        top: 12px;
+        left: 12px;
         z-index: 100;
-        background: rgba(30, 30, 30, 0.85);
-        color: white;
+        background: rgba(24, 24, 27, 0.85);
+        color: #e4e4e7;
+        border: 1px solid #3f3f46;
+        border-radius: 6px;
     }
 
     .drawer-toggle-btn:hover {
-        background: #333;
-     }
+        background: #27272a;
+        color: #38bdf8;
+    }
 
     .bg-dark-drawer {
-        background-color: #242424 !important;
+        background-color: #1e1e20 !important;
         color: #f3f4f6;
     }
 
@@ -966,8 +1009,9 @@
     /// <summary>
     /// Charge le diagramme depuis un fichier JSON sélectionné
     /// </summary>
-    private async Task LoadDiagram(IBrowserFile file)
+    private async Task LoadDiagram(InputFileChangeEventArgs e)
     {
+        var file = e.File;
         if (file == null) return;
 
         try
