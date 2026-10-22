@@ -46,7 +46,7 @@
             
             <!-- En-tête : Titre + Bouton de fermeture -->
             <div class="d-flex align-center justify-space-between mb-2">
-                <MudText Typo="Typo.subtitle1" Class="fw-bold" Style="color: #e4e4e7;">Catalogue Recettes</MudText>
+                <MudText Typo="Typo.subtitle1" Class="fw-bold" Style="color: #e4e4e7;">Recipe Catalog</MudText>
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
                                Size="MudBlazor.Size.Small" 
                                Color="Color.Default" 
@@ -67,7 +67,7 @@
                            Size="MudBlazor.Size.Small"
                            Class="tool-btn"
                            OnClick="SaveDiagram">
-                    Sauver
+                    Save
                 </MudButton>
 
                 <!-- 2. Bouton Charger : InputFile natif masqué + Bouton label propre -->
@@ -80,7 +80,7 @@
                            Size="MudBlazor.Size.Small"
                            Class="tool-btn"
                            for="fileInputLoader">
-                    Charger
+                    Load
                 </MudButton>
 
                 <!-- 3. Bouton Vider -->
@@ -90,7 +90,7 @@
                            Size="MudBlazor.Size.Small"
                            Class="tool-btn text-muted-hover"
                            OnClick="ClearDiagram">
-                    Vider
+                    Clear
                 </MudButton>
             </div>
 
@@ -105,7 +105,7 @@
 
                     <!-- Titre compact pour l'historique -->
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1 fw-bold">
-                        Dernières recherches :
+                        Search history :
                     </MudText>
 
                     <!-- Bandeau horizontal défilant avec les icônes -->
@@ -140,7 +140,7 @@
             <!-- Barre de recherche -->
             <!-- Sélecteur / Barre de recherche avec autocomplétion des produits -->
             <MudAutocomplete T="Product"
-                             Placeholder="Rechercher un produit..."
+                             Placeholder="Find a product..."
                              SearchFunc="@SearchProducts"
                              ToStringFunc="@(p => p?.Name ?? string.Empty)"
                              Value="_selectedProduct"
@@ -191,9 +191,9 @@
                             FixedContent="true"
                             Size="MudBlazor.Size.Small"
                             Class="mb-3 w-100 d-flex justify-center mode-toggle-group">
-                <MudToggleItem Value="ResourceFilterMode.All" Text="Tout" Class="flex-grow-1 text-center" />
-                <MudToggleItem Value="ResourceFilterMode.Input" Text="Entrées" Class="flex-grow-1 text-center" />
-                <MudToggleItem Value="ResourceFilterMode.Output" Text="Sorties" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="ResourceFilterMode.All" Text="All" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="ResourceFilterMode.Input" Text="Input" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="ResourceFilterMode.Output" Text="Output" Class="flex-grow-1 text-center" />
             </MudToggleGroup>
         </div>
 
