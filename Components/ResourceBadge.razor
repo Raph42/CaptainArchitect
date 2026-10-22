@@ -3,7 +3,7 @@
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
 
-<MudTooltip Text="@TooltipText" Placement="Placement.Top" Arrow="true">
+<MudTooltip Text="@TooltipText" Placement="Placement.Top" Arrow="true" Delay="150">
     <!-- Ajout de l'événement @onclick et d'un curseur pointeur -->
     <div class="resource-badge" @onclick="OnClickBadge" @onclick:stopPropagation="true">
         <img src="@ImagePath" 
