@@ -1,6 +1,10 @@
 ﻿@page "/"
 @inject HttpClient Http
 @inject ResourceService ResourceService
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@using System.Text.Json
+
 @implements IDisposable
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Options
@@ -22,6 +26,7 @@
                    OnClick="@ToggleDrawer"
                    Class="drawer-toggle-btn" />
 
+
     <!-- Tiroir latéral rétractable MudBlazor -->
     <MudDrawer @bind-Open="@_drawerOpen"
                ClipMode="DrawerClipMode.Never"
@@ -31,11 +36,51 @@
                Class="pa-3 bg-dark-drawer d-flex flex-column"
                Style="height: 100vh;">
 
+             
+               
         <!-- 1. ZONE FIXE DU HAUT (Titre + Recherche + Filtres) -->
         <div style="flex-shrink: 0;">
             <MudDrawerHeader Class="px-0 py-2">
                 <MudText Typo="Typo.h6">Recettes COI</MudText>
             </MudDrawerHeader>
+
+
+
+        <!-- Boutons Sauvegarde & Chargement -->
+        <div class="d-flex align-center gap-2 mb-2">
+            <!-- Bouton d'exportation / téléchargement JSON -->
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       StartIcon="@Icons.Material.Filled.Save" 
+                       Size="MudBlazor.Size.Small"
+                       OnClick="SaveDiagram">
+                Sauvegarder
+            </MudButton>
+
+            <!-- Bouton d'importation depuis un fichier JSON -->
+            <MudFileUpload T="IBrowserFile" 
+                           FilesChanged="LoadDiagram" 
+                           Accept=".json">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Secondary" 
+                               StartIcon="@Icons.Material.Filled.FolderOpen" 
+                               Size="MudBlazor.Size.Small">
+                        Charger
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+
+            <!-- Bouton pour vider le canvas -->
+            <MudButton Variant="Variant.Text" 
+                       Color="Color.Error" 
+                       StartIcon="@Icons.Material.Filled.Clear" 
+                       Size="MudBlazor.Size.Small"
+                       OnClick="ClearDiagram">
+                Nouveau
+            </MudButton>
+        </div>
+
 
 
             <!-- HISTORIQUE DES DERNIÈRES RECHERCHES -->
@@ -641,7 +686,7 @@
         {
             // Chargement du fichier unique
             var data = await Http.GetFromJsonAsync<CoiData>("data/captain_of_industry_data.json");
-            
+
             if (data != null)
             {
                 if (data.Products != null)
@@ -837,6 +882,174 @@
     public void Dispose()
     {
         ResourceService.OnResourceFilterRequested -= HandleResourceFilterRequested;
+    }
+
+
+
+
+    /// <summary>
+    /// Réinitialise complètement le diagramme.
+    /// </summary>
+    private void ClearDiagram()
+    {
+        // Supprime tous les liens puis tous les nœuds
+        Diagram.Links.Clear();
+        Diagram.Nodes.Clear();
+        FlowEngine.RecalculateFlows(Diagram);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Sauvegarde l'état actuel du diagramme dans un fichier JSON téléchargé par le client.
+    /// </summary>
+    private async Task SaveDiagram()
+    {
+        try
+        {
+            var saveData = new DiagramSaveData();
+
+            // 1. Sauvegarde des nœuds (machines)
+            foreach (var node in Diagram.Nodes.OfType<MachineNodeModel>())
+            {
+                saveData.Nodes.Add(new SavedNodeData
+                {
+                    NodeId = node.Id,
+                    RecipeId = node.Recipe.RecipeId,
+                    MachineId = node.CurrentMachineId,
+                    Multiplier = node.Multiplier,
+                    X = node.Position.X,
+                    Y = node.Position.Y
+                });
+            }
+
+            // 2. Sauvegarde des liaisons entre les ports
+            foreach (var link in Diagram.Links)
+            {
+                if (link.Source is SinglePortAnchor srcAnchor && srcAnchor.Port != null &&
+                    link.Target is SinglePortAnchor tgtAnchor && tgtAnchor.Port != null)
+                {
+                    // On vérifie que les ports sont bien des ResourcePortModel et rattachés à des MachineNodeModel
+                    if (srcAnchor.Port is ResourcePortModel srcResPort &&
+                        tgtAnchor.Port is ResourcePortModel tgtResPort &&
+                        srcResPort.Parent is MachineNodeModel srcNode &&
+                        tgtResPort.Parent is MachineNodeModel tgtNode)
+                    {
+                        saveData.Links.Add(new SavedLinkData
+                            {
+                                SourceNodeId = srcNode.Id,
+                                SourceProductId = srcResPort.ProductId,
+                                SourceDirection = srcResPort.Direction,
+
+                                TargetNodeId = tgtNode.Id,
+                                TargetProductId = tgtResPort.ProductId,
+                                TargetDirection = tgtResPort.Direction
+                            });
+                    }
+                }
+            }
+
+            // 3. Sérialisation et téléchargement du JSON
+            var jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = true });
+            var fileName = $"usine_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            await JS.InvokeVoidAsync("downloadFileFromText", fileName, jsonString);
+
+            Snackbar.Add("Diagramme sauvegardé avec succès !", Severity.Success);
+
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur lors de la sauvegarde : {ex.Message}", Severity.Error);
+        }
+
+    }
+
+    /// <summary>
+    /// Charge le diagramme depuis un fichier JSON sélectionné
+    /// </summary>
+    private async Task LoadDiagram(IBrowserFile file)
+    {
+        if (file == null) return;
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var saveData = await JsonSerializer.DeserializeAsync<DiagramSaveData>(stream);
+
+            if (saveData == null || Recipes == null)
+            {
+                Snackbar.Add("Le fichier de sauvegarde est invalide.", Severity.Warning);
+                return;
+            }
+
+            // 1. Réinitialisation
+            Diagram.Links.Clear();
+            Diagram.Nodes.Clear();
+
+            var nodeMap = new Dictionary<string, MachineNodeModel>();
+
+            // 2. Recréation des machines
+            foreach (var savedNode in saveData.Nodes)
+            {
+                var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
+                if (recipe != null)
+                {
+                    var node = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(savedNode.X, savedNode.Y))
+                    {
+                        Multiplier = savedNode.Multiplier
+                    };
+
+                    // Restauration du niveau de machine si nécessaire
+                    if (!string.IsNullOrWhiteSpace(savedNode.MachineId) && node.CurrentMachineId != savedNode.MachineId)
+                    {
+                        while (node.CurrentMachineId != savedNode.MachineId && node.Upgrade()) { }
+                    }
+
+                    Diagram.Nodes.Add(node);
+                    nodeMap[savedNode.NodeId] = node;
+                }
+            }
+
+            // 3. Recréation des liens grâce au ProductId et à la Direction
+            foreach (var savedLink in saveData.Links)
+            {
+                if (nodeMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
+                    nodeMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
+                {
+                    // Recherche du port correspondant sur le nœud source
+                    var srcPort = srcNode.Ports.OfType<ResourcePortModel>()
+                        .FirstOrDefault(p => p.Direction == savedLink.SourceDirection &&
+                                             string.Equals(p.ProductId, savedLink.SourceProductId, StringComparison.OrdinalIgnoreCase));
+
+                    // Recherche du port correspondant sur le nœud cible
+                    var tgtPort = tgtNode.Ports.OfType<ResourcePortModel>()
+                        .FirstOrDefault(p => p.Direction == savedLink.TargetDirection &&
+                                             string.Equals(p.ProductId, savedLink.TargetProductId, StringComparison.OrdinalIgnoreCase));
+
+                    if (srcPort != null && tgtPort != null)
+                    {
+                        var link = new ResourceLinkModel(new SinglePortAnchor(srcPort), new SinglePortAnchor(tgtPort));
+
+                        // Attribution de la couleur de la ressource
+                        if (ProductDict.TryGetValue(srcPort.ProductId, out var prod) && !string.IsNullOrWhiteSpace(prod.Color))
+                        {
+                            link.Color = prod.Color;
+                        }
+
+                        Diagram.Links.Add(link);
+                    }
+                }
+            }
+
+            // 4. Recalcul des flux
+            FlowEngine.RecalculateFlows(Diagram);
+            StateHasChanged();
+
+            Snackbar.Add("Diagramme chargé avec succès !", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur lors du chargement : {ex.Message}", Severity.Error);
+        }
     }
 
 

@@ -44,6 +44,19 @@
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_content/Z.Blazor.Diagrams/script.min.js"></script>
 
+    <script>
+            // Déclenche le téléchargement d'un fichier texte / JSON dans le navigateur
+            window.downloadFileFromText = function (fileName, textContent) {
+                const blob = new Blob([textContent], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = fileName;
+                anchor.click();
+                URL.revokeObjectURL(url);
+            };
+    </script>
+
 </body>
 
 </html>
