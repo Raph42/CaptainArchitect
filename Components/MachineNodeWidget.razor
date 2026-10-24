@@ -184,8 +184,13 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                 //var port = Node.Ports[Node.Recipe.Inputs.Count + i] as ResourcePortModel;
 
                 // Récupération sécurisée du port de sortie par son index relatif aux sorties
-                var port = Node.Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Output)
-                                     .ElementAtOrDefault(index) as ResourcePortModel;
+               @*  var port = Node.Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Output)
+                                     .ElementAtOrDefault(index) as ResourcePortModel; *@
+                
+                // On peut faire correspondre directement la ressource de la recette avec le port
+                // correspondant à cette même ressource et dans la bonne direction (Output)
+                var port = Node.Ports.OfType<ResourcePortModel>()
+                                     .FirstOrDefault(p => p.Direction == PortDirection.Output && p.ProductId == output.ProductId);
 
                 if (port != null)
                 {
