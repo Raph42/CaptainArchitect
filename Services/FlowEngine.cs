@@ -82,12 +82,12 @@ public static class FlowEngine
         {
             // OPTIMISATION : Ne rafraîchir que les nœuds qui possèdent au moins un lien,
             // ou dont les flux ont été calculés. Les machines isolées n'ont pas besoin d'être redessinées.
-            bool hasLinks = node.Ports.Any(p => p.Links.Count > 0);
+            //bool hasLinks = node.Ports.Any(p => p.Links.Count > 0);
 
-            if (hasLinks)
-            {
+            //if (hasLinks)
+            //{
                 node.Refresh();
-            }
+            //}
         }
 
         diagram.Refresh();

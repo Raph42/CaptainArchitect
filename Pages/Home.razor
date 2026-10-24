@@ -813,11 +813,14 @@
         // Abonne le moteur de calcul aux événements d'ajout/suppression de liens et de nœuds
         Diagram.Links.Added += link => 
         {
-            link.TargetAttached += (l) => FlowEngine.RecalculateFlows(Diagram);
+            link.TargetAttached += _ => FlowEngine.RecalculateFlows(Diagram);
+            link.Changed += _ => FlowEngine.RecalculateFlows(Diagram);
         };
 
-        Diagram.Links.Removed += link => FlowEngine.RecalculateFlows(Diagram);
-        Diagram.Nodes.Removed += node => FlowEngine.RecalculateFlows(Diagram);
+        // Diagram.Links.Removed += link => FlowEngine.RecalculateFlows(Diagram);
+        // Diagram.Nodes.Removed += node => FlowEngine.RecalculateFlows(Diagram);
+        Diagram.Links.Removed += _ => FlowEngine.RecalculateFlows(Diagram);
+        Diagram.Nodes.Removed += _ => FlowEngine.RecalculateFlows(Diagram);
 
         // Recalcul initial
         FlowEngine.RecalculateFlows(Diagram);

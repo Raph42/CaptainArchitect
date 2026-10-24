@@ -96,7 +96,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                         <div class="rate-stack">
                             @* Ligne 1 : Débit théorique total + Débit de base si Multiplier > 1 *@
 
-                            <span class="rate-theoretical">
+                            <span class="rate-theoretical" title="Theoretical flow rate required by the recipe">
                                 @theoreticalRate.ToString("0.#")/m
                                 @if (Node.Multiplier > 1m)
                                 {
@@ -107,10 +107,11 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                             @if (hasLinks)
                             {
                                 @* Ligne 2 : Débit actuel réel *@
-                                <span class="rate-actual @statusClass">@actualRate.ToString("0.#")/m</span>
+                                <span class="rate-actual @statusClass" title="Actual quantity received from connected pipes">
+                                    @actualRate.ToString("0.#")/m</span>
 
                                 @* Ligne 3 : Manque ou Équilibre *@
-                                <span class="rate-diff @statusClass">
+                                <span class="rate-diff @statusClass" title="Gap to be filled">
                                     @if (diff < -0.01m)
                                     {
                                         <span>@diff.ToString("0.#")/m</span>
@@ -176,7 +177,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                         <div class="rate-stack text-right">
 
                             @* Ligne 1 : Débit théorique total (Gris) + Débit de base unitaire si Multiplier > 1 *@
-                            <span class="rate-theoretical">
+                            <span class="rate-theoretical" title="Nominal theoretical capacity">
                                 @if (Node.Multiplier > 1m)
                                 {
                                     <span class="rate-base">(@Node.GetBaseOutputRatePerMin(output).ToString("0.#")) </span>
@@ -186,7 +187,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
 
                             @* Ligne 2 : Toujours affichée (affiche 0/m en gris si non connecté, ou le débit réel distribué) *@
-                            <span class="rate-actual @statusClass">
+                            <span class="rate-actual @statusClass" title="Flow distributed to downstream machines">
                                 @*  @(hasLinks ? distributedRate.ToString("0.#") : "0")/m  *@
                                 @((hasLinks ? distributedRate : actualProduced).ToString("0.#"))/m
                             </span>
@@ -195,7 +196,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                             @if (hasLinks)
                             {
                                 @* Ligne 3 : Manque / Surplus (affiché uniquement lorsqu'un tuyau est branché) *@
-                                <span class="rate-diff @statusClass">
+                                <span class="rate-diff @statusClass" title="Available surplus">
                                     @if (balance > 0.01m)
                                     {
                                         <span>+@balance.ToString("0.#")/m</span>
@@ -415,12 +416,16 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
     }
 
     .diagram-port {
-        width: 12px;
-        height: 12px;
+        width: 12px !important;
+        height: 12px !important;
+        min-width: 12px !important;
+        min-height: 12px !important;
+        flex-shrink: 0 !important; /* Empêche le conteneur flex d'écraser le rond */
         background: #3b82f6;
         border: 2px solid #ffffff;
         border-radius: 50%;
         cursor: crosshair;
+        box-sizing: border-box;
     }
 
     /* 6. Le centre : parfaitement figé */
@@ -472,9 +477,10 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         justify-content: center;
         line-height: 1.15;
         white-space: nowrap !important;
-        width: 65px; /* Assez large pour les chiffres à virgule ex: "(12) 36/m" */
-        min-width: 65px;
+        width: 68px; /* Assez large pour les chiffres à virgule ex: "(12) 36/m" */
+        min-width: 68px;
         flex-shrink: 0;
+        font-size: 0.72rem;
     }
 
     .text-right {
@@ -524,7 +530,15 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
     /* Si tu veux du vert pour le surplus : mets #4ade80, si tu préfères bleu/cyan : #38bdf8, ou orange : #fb923c */
     .rate-surplus {
-        color: #4ade80 !important; /* Vert pour le surplus positif */
+        /* Vert néon éclatant très voyant sur fond sombre : #22c55e ou #00ff88 */
+        color: #00ff88 !important; 
+        
+        /* Texte légèrement plus grand et plus gras pour ressortir */
+        font-size: 0.76rem !important; 
+        font-weight: 700 !important;
+        
+        /* Petit halo lumineux (glow) pour le rendre immédiatement repérable */
+        text-shadow: 0 0 6px rgba(0, 255, 136, 0.35);
     }
 
     /* Déconnecté (sans liens) */
