@@ -172,12 +172,20 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
             </MudTooltip>
         </div>
 
-        <!-- Colonne Sorties -->
+
+        <!-- Colonne Sorties avec boutons flèches ▲ / ▼ -->
         <div class="port-column outputs">
+
             @for (int i = 0; i < Node.Recipe.Outputs.Count; i++)
             {
-                var output = Node.Recipe.Outputs[i];
-                var port = Node.Ports[Node.Recipe.Inputs.Count + i] as ResourcePortModel;
+                var index = i; // Copie locale pour la closure des boutons
+                var output = Node.Recipe.Outputs[index];
+
+                //var port = Node.Ports[Node.Recipe.Inputs.Count + i] as ResourcePortModel;
+
+                // Récupération sécurisée du port de sortie par son index relatif aux sorties
+                var port = Node.Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Output)
+                                     .ElementAtOrDefault(index) as ResourcePortModel;
 
                 if (port != null)
                 {
@@ -199,7 +207,10 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                                     : (balance > 0.01m) ? "rate-surplus"
                                     : "rate-ok";
 
-                    <div class="port-row output-row">
+                    <!-- key="port.Id" force Blazor à déplacer physiquement le port avec son identifiant exact -->
+                    <div class="port-row output-row" @key="port.Id">
+
+                        <!-- Pile de débits (alignée à droite) -->
                         <div class="rate-stack text-right">
 
                             @* Ligne 1 : Débit théorique total (Gris) + Débit de base unitaire si Multiplier > 1 *@
@@ -239,9 +250,32 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                             }
                         </div>
 
+                        <!-- Groupe de flèches pour inverser les sorties (affiché s'il y a plus d'1 sortie) -->
+                        @if (Node.Recipe.Outputs.Count > 1)
+                        {
+                            <div class="port-swap-controls">
+                                <!-- Monter la sortie (▲) -->
+                                <button class="btn-port-swap" 
+                                        disabled="@(!Node.CanMoveOutputUp(index))" 
+                                        title="Monter cette sortie" 
+                                        @onclick="() => MoveOutputUp(index)" 
+                                        @onclick:stopPropagation="true">▲</button>
+
+                                <!-- Descendre la sortie (▼) -->
+                                <button class="btn-port-swap" 
+                                        disabled="@(!Node.CanMoveOutputDown(index))" 
+                                        title="Descendre cette sortie" 
+                                        @onclick="() => MoveOutputDown(index)" 
+                                        @onclick:stopPropagation="true">▼</button>
+                            </div>
+                        }
+
+                        <!-- Icône badge de la ressource en sortie -->
                         <ResourceBadge ProductId="@output.ProductId" Direction="PortDirection.Output" />
 
+                        <!-- Port rond de connexion -->
                         <PortRenderer Port="port" Class="diagram-port" />
+
                     </div>
                 }
             }
@@ -716,6 +750,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         }
     }
 
+
     // Déplacement d'une entrée vers le bas
     private async Task MoveInputDown(int index)
     {
@@ -725,6 +760,40 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
             FlowEngine.RecalculateFlows(Diagram);
             
             // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
+            await Task.Yield();
+            
+            // Notifie le diagramme pour recalculer et redessiner les courbes des liens
+            Diagram.Refresh();
+        }
+    }
+
+
+    // Déplacement d'une sortie vers le haut
+    private async Task MoveOutputUp(int index)
+    {
+        if (Node.CanMoveOutputUp(index))
+        {
+            Node.SwapOutputs(index, index - 1);
+            FlowEngine.RecalculateFlows(Diagram);
+            
+            // Laisse un cycle de rendu au navigateur pour repositionner les éléments HTML
+            await Task.Yield();
+            
+            // Notifie le diagramme pour recalculer et redessiner les courbes des liens
+            Diagram.Refresh();
+        }
+    }
+
+
+    // Déplacement d'une sortie vers le bas
+    private async Task MoveOutputDown(int index)
+    {
+        if (Node.CanMoveOutputDown(index))
+        {
+            Node.SwapOutputs(index, index + 1);
+            FlowEngine.RecalculateFlows(Diagram);
+            
+            // Laisse un cycle de rendu au navigateur pour repositionner les éléments HTML
             await Task.Yield();
             
             // Notifie le diagramme pour recalculer et redessiner les courbes des liens

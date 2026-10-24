@@ -240,4 +240,83 @@ public class MachineNodeModel : NodeModel
     }
 
 
+
+    // =========================================================================
+    // GESTION DU RÉORDONNANCEMENT DES SORTIES (AVEC SUIVI DES LIAISONS)
+    // =========================================================================
+
+    /// <summary>
+    /// Vérifie si la sortie à l'index donné peut monter (index > 0).
+    /// </summary>
+    public bool CanMoveOutputUp(int index) => index > 0;
+
+    /// <summary>
+    /// Vérifie si la sortie à l'index donné peut descendre (index < Outputs.Count - 1).
+    /// </summary>
+    public bool CanMoveOutputDown(int index) => Recipe?.Outputs != null && index < Recipe.Outputs.Count - 1;
+
+    /// <summary>
+    /// Permute deux sorties consécutives dans la recette et répercute le changement sur les ports.
+    /// Échange les coordonnées en mémoire pour que les courbes SVG suivent immédiatement.
+    /// </summary>
+    public void SwapOutputs(int indexA, int indexB)
+    {
+        // 1. Contrôle de validité des index
+        if (Recipe?.Outputs == null ||
+            indexA < 0 || indexA >= Recipe.Outputs.Count ||
+            indexB < 0 || indexB >= Recipe.Outputs.Count ||
+            indexA == indexB)
+        {
+            return;
+        }
+
+        // 2. Permutation dans la liste des sorties de la recette
+        var tempItem = Recipe.Outputs[indexA];
+        Recipe.Outputs[indexA] = Recipe.Outputs[indexB];
+        Recipe.Outputs[indexB] = tempItem;
+
+        // 3. Récupération des ports d'entrée et de sortie
+        var inputPorts = Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Input).ToList();
+        var outputPorts = Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Output).ToList();
+
+        if (indexA < outputPorts.Count && indexB < outputPorts.Count)
+        {
+            var portA = outputPorts[indexA];
+            var portB = outputPorts[indexB];
+
+            // Permutation dans la liste ordonnée des sorties
+            outputPorts[indexA] = portB;
+            outputPorts[indexB] = portA;
+
+            // 4. Échange des positions géométriques des deux ports
+            // Les câbles Blazor.Diagrams lisent ces coordonnées pour tracer les courbes SVG
+            var tempPos = portA.Position;
+            portA.Position = portB.Position;
+            portB.Position = tempPos;
+
+            // 5. Réorganisation de la liste interne _ports du NodeModel (Entrées inchangées, Sorties réordonnées)
+            var allPortsField = typeof(NodeModel).GetField("_ports", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (allPortsField != null && allPortsField.GetValue(this) is List<PortModel> internalPortsList)
+            {
+                internalPortsList.Clear();
+                internalPortsList.AddRange(inputPorts);
+                internalPortsList.AddRange(outputPorts);
+            }
+
+            // 6. Recalcul forcé de la trajectoire pour tous les liens connectés à ces deux ports
+            foreach (var link in portA.Links)
+            {
+                link.Refresh();
+            }
+            foreach (var link in portB.Links)
+            {
+                link.Refresh();
+            }
+        }
+
+        // 7. Notifier le nœud pour mettre à jour l'affichage Blazor
+        Refresh();
+    }
+
+
 }
