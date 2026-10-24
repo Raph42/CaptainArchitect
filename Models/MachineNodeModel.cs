@@ -160,4 +160,84 @@ public class MachineNodeModel : NodeModel
         DownstreamDemandRates.TryGetValue(portId, out var val) ? val : 0m;
 
 
+
+    // =========================================================================
+    // GESTION DU RÉORDONNANCEMENT DES ENTRÉES (AVEC SUIVI DES LIAISONS)
+    // =========================================================================
+
+    /// <summary>
+    /// Vérifie si l'entrée à l'index donné peut monter (index > 0).
+    /// </summary>
+    public bool CanMoveInputUp(int index) => index > 0;
+
+    /// <summary>
+    /// Vérifie si l'entrée à l'index donné peut descendre (index < Inputs.Count - 1).
+    /// </summary>
+    public bool CanMoveInputDown(int index) => index < Recipe.Inputs.Count - 1;
+
+
+    /// <summary>
+    /// Permute deux entrées consécutives dans la recette et répercute le changement sur les ports.
+    /// Échange les coordonnées des ports pour que les câbles SVG soient repositionnés.
+    /// </summary>
+    public void SwapInputs(int indexA, int indexB)
+    {
+        // 1. Contrôle des bornes
+        if (Recipe?.Inputs == null ||
+            indexA < 0 || indexA >= Recipe.Inputs.Count ||
+            indexB < 0 || indexB >= Recipe.Inputs.Count ||
+            indexA == indexB)
+        {
+            return;
+        }
+
+        // 2. Permutation dans la liste des ingrédients de la recette
+        var tempItem = Recipe.Inputs[indexA];
+        Recipe.Inputs[indexA] = Recipe.Inputs[indexB];
+        Recipe.Inputs[indexB] = tempItem;
+
+        // 3. Récupération des ports d'entrée et de sortie
+        var inputPorts = Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Input).ToList();
+        var outputPorts = Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Output).ToList();
+
+        if (indexA < inputPorts.Count && indexB < inputPorts.Count)
+        {
+            var portA = inputPorts[indexA];
+            var portB = inputPorts[indexB];
+
+            // Permutation dans la liste ordonnée
+            inputPorts[indexA] = portB;
+            inputPorts[indexB] = portA;
+
+            // 4. Échange des positions géométriques des deux ports
+            // Comme ils permutent de rangée, la position Y de A devient celle de B et inversement
+            var tempPos = portA.Position;
+            portA.Position = portB.Position;
+            portB.Position = tempPos;
+
+            // 5. Réorganisation de la liste interne _ports du NodeModel
+            var allPortsField = typeof(NodeModel).GetField("_ports", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (allPortsField != null && allPortsField.GetValue(this) is List<PortModel> internalPortsList)
+            {
+                internalPortsList.Clear();
+                internalPortsList.AddRange(inputPorts);
+                internalPortsList.AddRange(outputPorts);
+            }
+
+            // 6. Notifier tous les liens connectés pour qu'ils se redessinent aux nouvelles coordonnées
+            foreach (var link in portA.Links)
+            {
+                link.Refresh();
+            }
+            foreach (var link in portB.Links)
+            {
+                link.Refresh();
+            }
+        }
+
+        // 7. Notifier le nœud pour mettre à jour son interface
+        Refresh();
+    }
+
+
 }

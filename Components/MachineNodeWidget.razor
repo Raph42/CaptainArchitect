@@ -67,13 +67,14 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
     <!-- Corps : Entrées à gauche, Icône Machine au centre, Sorties à droite -->
     <div class="machine-body">
 
-        <!-- Colonne Entrées -->
+        <!-- Colonne Entrées avec boutons flèches ▲ / ▼ -->
         <div class="port-column inputs">
 
             @for (int i = 0; i < Node.Recipe.Inputs.Count; i++)
             {
-                var input = Node.Recipe.Inputs[i];
-                var port = Node.Ports[i] as ResourcePortModel;
+                var index = i; // Copie locale pour la closure des boutons
+                var input = Node.Recipe.Inputs[index];
+                var port = Node.Ports.ElementAtOrDefault(index) as ResourcePortModel;
 
                 if (port != null)
                 {
@@ -88,11 +89,36 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
                                     : (diff < -0.01m) ? "rate-warning"
                                     : "rate-ok";
 
-                    <div class="port-row input-row">
+                    <!-- key="port.Id" force Blazor à déplacer le port avec son identifiant exact -->
+                    <div class="port-row input-row" @key="port.Id">
+
+                        <!-- Port rond de connexion -->
                         <PortRenderer Port="port" Class="diagram-port" />
 
+                        <!-- Icône badge de la ressource -->
                         <ResourceBadge ProductId="@input.ProductId" Direction="PortDirection.Input" />
 
+                        <!-- Petit groupe de flèches pour inverser les entrées (affiché s'il y a plus d'1 entrée) -->
+                        @if (Node.Recipe.Inputs.Count > 1)
+                        {
+                            <div class="port-swap-controls">
+                                <!-- Monter l'entrée (▲) -->
+                                <button class="btn-port-swap" 
+                                        disabled="@(!Node.CanMoveInputUp(index))" 
+                                        title="Monter cette entrée"
+                                        @onclick="() => MoveInputUp(index)"
+                                        @onclick:stopPropagation="true">▲</button>
+
+                                <!-- Descendre l'entrée (▼) -->
+                                <button class="btn-port-swap" 
+                                        disabled="@(!Node.CanMoveInputDown(index))" 
+                                        title="Descendre cette entrée"
+                                        @onclick="() => MoveInputDown(index)"
+                                        @onclick:stopPropagation="true">▼</button>
+                            </div>
+                        }
+
+                        <!-- Pile de débits (lignes 1, 2, 3) -->
                         <div class="rate-stack">
                             @* Ligne 1 : Débit théorique total + Débit de base si Multiplier > 1 *@
 
@@ -554,6 +580,46 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         color: #38bdf8 !important;
     }
 
+    /* Conteneur des petites flèches de réorganisation d'entrées */
+    .port-swap-controls {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        margin-right: 4px;
+        user-select: none;
+    }
+
+    /* Boutons flèches ultra-compacts */
+    .btn-port-swap {
+        background: transparent;
+        color: #94a3b8;
+        border: none;
+        cursor: pointer;
+        font-size: 0.55rem;
+        line-height: 1;
+        width: 12px;
+        height: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: 2px;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-port-swap:hover:not(:disabled) {
+        background: rgba(56, 189, 248, 0.25);
+        color: #38bdf8;
+    }
+
+    .btn-port-swap:disabled {
+        color: #3f3f46;
+        cursor: not-allowed;
+        opacity: 0.3;
+    }
+
 </style>
 
 @code {
@@ -632,5 +698,39 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
     {
         //DeleteNode();
     }
+
+
+    // Déplacement d'une entrée vers le haut
+    private async Task MoveInputUp(int index)
+    {
+        if (Node.CanMoveInputUp(index))
+        {
+            Node.SwapInputs(index, index - 1);
+            FlowEngine.RecalculateFlows(Diagram);
+            
+            // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
+            await Task.Yield();
+            
+            // Notifie le diagramme pour recalculer et redessiner les courbes des liens
+            Diagram.Refresh();
+        }
+    }
+
+    // Déplacement d'une entrée vers le bas
+    private async Task MoveInputDown(int index)
+    {
+        if (Node.CanMoveInputDown(index))
+        {
+            Node.SwapInputs(index, index + 1);
+            FlowEngine.RecalculateFlows(Diagram);
+            
+            // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
+            await Task.Yield();
+            
+            // Notifie le diagramme pour recalculer et redessiner les courbes des liens
+            Diagram.Refresh();
+        }
+    }
+
 
 }
