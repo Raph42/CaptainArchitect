@@ -527,6 +527,13 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
     /* Rouge si sous-alimenté / goulot */
     .rate-warning {
         color: #f87171 !important;
+
+        /* Texte légèrement plus grand et plus gras pour ressortir */
+        font-size: 0.76rem !important; 
+        font-weight: 700 !important;
+        
+        /* Petit halo lumineux (glow) pour le rendre immédiatement repérable */
+        text-shadow: 0 0 6px rgba(255, 0, 136, 0.35);
     }
 
     /* Si tu veux du vert pour le surplus : mets #4ade80, si tu préfères bleu/cyan : #38bdf8, ou orange : #fb923c */
