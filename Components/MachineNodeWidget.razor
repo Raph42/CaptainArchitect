@@ -1,10 +1,10 @@
 ﻿<!--
 Pour que le diagramme sache qu'il doit utiliser MachineNodeWidget
 chaque fois qu'il rencontre un MachineNodeModel, on l'enregistre dans le composant
-d'enregistrement de Blazor.Diagrams. Dans Pages/Home.razor 
+d'enregistrement de Blazor.Diagrams.
 
-et
-Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
+Dans Pages/Home.razor 
+     Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 -->
 
 @using MudBlazor
@@ -26,7 +26,7 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         <div class="d-flex align-center">
 
             <!-- Nom de la machine (au lieu du nom de la recette) -->
-            <span class="machine-title" title="@MachineDisplayName (@Node.Recipe.RecipeId)">
+            <span class="machine-title @GetMachineTierClass()" title="@MachineDisplayName (@Node.Recipe.RecipeId)">
                 @MachineDisplayName
             </span>
 
@@ -659,6 +659,33 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
         opacity: 0.3;
     }
 
+    /* Couleurs par palier (Tier) pour le titre de la machine */
+    .machine-title.tier-1 {
+        color: #f4f4f5; /* Blanc cassé / neutre */
+    }
+
+    .machine-title.tier-2 {
+        color: #facc15; /* Jaune lumineux */
+        text-shadow: 0 0 6px rgba(250, 204, 21, 0.25);
+    }
+
+    .machine-title.tier-3 {
+        /* Si tu préfères l'orange ambré (recommandé pour éviter la confusion avec les alertes) : #fb923c */
+        /* Si tu veux absolument du rouge : #f87171 */
+        color: #fb923c; 
+        text-shadow: 0 0 6px rgba(251, 146, 60, 0.25);
+    }
+
+    .machine-title.tier-4 {
+        color: #c084fc; /* Violet / Mauve néon */
+        text-shadow: 0 0 6px rgba(192, 132, 252, 0.25);
+    }
+
+    .machine-title.tier-5 {
+        color: #22d3ee; /* Cyan électrique (haute technologie / endgame) */
+        text-shadow: 0 0 6px rgba(34, 211, 238, 0.3);
+    }
+
 </style>
 
 @code {
@@ -804,6 +831,44 @@ Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
             // Notifie le diagramme pour recalculer et redessiner les courbes des liens
             Diagram.Refresh();
         }
+    }
+
+
+    /// <summary>
+    /// Détermine la classe CSS de couleur en fonction du palier (Tier 1 à 5) de la machine.
+    /// </summary>
+    private string GetMachineTierClass()
+    {
+        int tier = DetectMachineTier();
+        return $"tier-{tier}";
+    }
+
+
+    /// <summary>
+    /// Détecte le palier selon le nom de la machine ou son index dans MachineBindings.
+    /// </summary>
+    private int DetectMachineTier()
+    {
+        var name = MachineDisplayName;
+
+        // 1. Détection via chiffres romains / arabes en fin de nom (ex: "Assembly IV", "Mixer II", "T3")
+        if (name.EndsWith(" V", StringComparison.OrdinalIgnoreCase) || name.EndsWith(" 5") || name.EndsWith("T5", StringComparison.OrdinalIgnoreCase))
+            return 5;
+        if (name.EndsWith(" IV", StringComparison.OrdinalIgnoreCase) || name.EndsWith(" 4") || name.EndsWith("T4", StringComparison.OrdinalIgnoreCase))
+            return 4;
+        if (name.EndsWith(" III", StringComparison.OrdinalIgnoreCase) || name.EndsWith(" 3") || name.EndsWith("T3", StringComparison.OrdinalIgnoreCase))
+            return 3;
+        if (name.EndsWith(" II", StringComparison.OrdinalIgnoreCase) || name.EndsWith(" 2") || name.EndsWith("T2", StringComparison.OrdinalIgnoreCase))
+            return 2;
+
+        // 2. Détection de secours : via l'index de machine dans la recette (ex: machine 0 = T1, machine 1 = T2...)
+        if (Node.Recipe.MachineBindings != null && Node.Recipe.MachineBindings.Count > 1)
+        {
+            return Math.Clamp(Node.CurrentBindingIndex + 1, 1, 5);
+        }
+
+        // Tier 1 par défaut
+        return 1;
     }
 
 
