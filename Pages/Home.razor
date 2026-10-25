@@ -269,9 +269,46 @@
         {
             <CascadingValue Value="Diagram">
                 <DiagramCanvas Class="diagram-container">
+
                 </DiagramCanvas>
             </CascadingValue>
         }
+
+        <!-- Overlay d'avancement du chargement de la sauvegarde -->
+        <MudOverlay Visible="@_isLoadingDiagram"
+                    DarkBackground="true"
+                    Absolute="true"
+                    ZIndex="1000">
+            <div class="d-flex flex-column align-center justify-center pa-6 rounded-lg"
+                 style="background: #27272a; border: 1px solid #3f3f46; min-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.6);">
+
+                <MudProgressCircular Color="Color.Info"
+                                     Size="MudBlazor.Size.Large"
+                                     Indeterminate="@(_loadingProgress == 0)"
+                                     Value="@_loadingProgress"
+                                     Class="mb-4" />
+
+                <MudText Typo="Typo.h6" Class="mb-1" Style="color: #38bdf8; font-weight: 600;">
+                    Chargement de l'usine...
+                </MudText>
+
+                <MudText Typo="Typo.body2" Class="mb-3 text-secondary" Style="color: #a1a1aa;">
+                    @_loadingStatusText
+                </MudText>
+
+                <MudProgressLinear Color="Color.Info"
+                                   Value="@_loadingProgress"
+                                   Rounded="true"
+                                   Size="MudBlazor.Size.Medium"
+                                   Style="width: 100%; height: 8px;" />
+
+                <MudText Typo="Typo.caption" Class="mt-2" Style="color: #71717a;">
+                    @($"{_loadingProgress}%")
+                </MudText>
+            </div>
+        </MudOverlay>
+
+
     </div>
 </div>
 
@@ -544,6 +581,11 @@
     // Variables d'historique
     private readonly List<Product> _recentProducts = new();
     private const int MaxRecentSearches = 10;
+
+    // Variables pour l'état d'avancement du chargement
+    private bool _isLoadingDiagram = false;
+    private int _loadingProgress = 0;
+    private string _loadingStatusText = "";
 
     // Propriété de filtrage des recettes
     private IEnumerable<Recipe>? FilteredRecipes =>
@@ -998,15 +1040,15 @@
 
             // 3. Sérialisation et téléchargement du JSON
             var jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = true });
-            var fileName = $"usine_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var fileName = $"factory_{DateTime.Now:yyyyMMdd_HHmmss}.json";
             await JS.InvokeVoidAsync("downloadFileFromText", fileName, jsonString);
 
-            Snackbar.Add("Diagramme sauvegardé avec succès !", Severity.Success);
+            Snackbar.Add("Diagram saved successfully !", Severity.Success);
 
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Erreur lors de la sauvegarde : {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error while saving : {ex.Message}", Severity.Error);
         }
 
     }
@@ -1021,12 +1063,19 @@
 
         try
         {
+            // 0. Initialisation de l'état de chargement
+            _isLoadingDiagram = true;
+            _loadingProgress = 0;
+            _loadingStatusText = "Reading the file...";
+            StateHasChanged();
+            await Task.Yield(); // Laisse le navigateur afficher l'overlay
+
             using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
             var saveData = await JsonSerializer.DeserializeAsync<DiagramSaveData>(stream);
 
             if (saveData == null || Recipes == null)
             {
-                Snackbar.Add("Le fichier de sauvegarde est invalide.", Severity.Warning);
+                Snackbar.Add("The save file is invalid.", Severity.Warning);
                 return;
             }
 
@@ -1036,9 +1085,18 @@
 
             var nodeMap = new Dictionary<string, MachineNodeModel>();
 
+			// Variables pour le suivi de l'avancement
+            int totalNodes = saveData.Nodes.Count;
+            int totalLinks = saveData.Links.Count;
+            int totalOperations = (totalNodes + totalLinks) > 0 ? (totalNodes + totalLinks) : 1;
+            int currentStep = 0;
+
+
             // 2. Recréation des machines
-            foreach (var savedNode in saveData.Nodes)
+            //foreach (var savedNode in saveData.Nodes)
+            for (int i = 0; i < totalNodes; i++)
             {
+                var savedNode = saveData.Nodes[i];
                 // Recherche de la recette dans les données chargées
                 var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
                 
@@ -1063,11 +1121,26 @@
                     Diagram.Nodes.Add(node);
                     nodeMap[savedNode.NodeId] = node;
                 }
+
+
+                currentStep++;
+                // Mise à jour de l'UI tous les 5 nœuds ou au dernier nœud pour rester fluide
+                if (i % 5 == 0 || i == totalNodes - 1)
+                {
+                    _loadingProgress = (int)((double)currentStep / totalOperations * 100);
+                    _loadingStatusText = $"Creation of the machines ({i + 1}/{totalNodes})...";
+                    StateHasChanged();
+                    await Task.Yield();
+                }
+
             }
 
             // 3. Recréation des liens aux bons ports grâce au ProductId et à la Direction
-            foreach (var savedLink in saveData.Links)
+            //foreach (var savedLink in saveData.Links)
+            for (int j = 0; j < totalLinks; j++)
             {
+                var savedLink = saveData.Links[j];
+
                 if (nodeMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
                     nodeMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
                 {
@@ -1094,18 +1167,37 @@
                         Diagram.Links.Add(link);
                     }
                 }
+
+
+                currentStep++;
+                // Mise à jour de l'UI toutes les 10 liaisons
+                if (j % 10 == 0 || j == totalLinks - 1)
+                {
+                    _loadingProgress = (int)((double)currentStep / totalOperations * 100);
+                    _loadingStatusText = $"Reconnecting the pipes ({j + 1}/{totalLinks})...";
+                    StateHasChanged();
+                    await Task.Yield();
+                }
+
             }
 
             // 4. Recalcul des flux
             FlowEngine.RecalculateFlows(Diagram);
             StateHasChanged();
 
-            Snackbar.Add("Diagramme chargé avec succès !", Severity.Success);
+            Snackbar.Add("Diagram successfully loaded !", Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Erreur lors du chargement : {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error while loading : {ex.Message}", Severity.Error);
         }
+        finally
+        {
+            // 5. Fermeture de l'overlay de progression
+            _isLoadingDiagram = false;
+            StateHasChanged();
+        }
+
     }
 
 
