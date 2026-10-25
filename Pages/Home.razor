@@ -893,14 +893,46 @@
     }
 
 
+    /// <summary>
+    /// Ajoute une machine sur le diagramme en la centrant exactement
+    /// dans la zone visible du canvas (prend en compte le zoom et le pan).
+    /// </summary>
+    /// <param name="recipe">La recette sélectionnée à instancier</param>
     private void AddRecipeNode(Recipe recipe)
     {
         // Place le nouveau nœud avec un léger décalage à chaque clic
-        var node = new MachineNodeModel(recipe, new Point(_spawnOffset, _spawnOffset));
-        _spawnOffset += 40;
-        if (_spawnOffset > 400) _spawnOffset = 150;
+        // var node = new MachineNodeModel(recipe, new Point(_spawnOffset, _spawnOffset));
+        // _spawnOffset += 40;
+        // if (_spawnOffset > 400) _spawnOffset = 150;
 
-        Diagram.Nodes.Add(node);
+        // Diagram.Nodes.Add(node);
+
+        // Dimensions approximatives de la carte MachineNodeWidget pour centrer son milieu géométrique
+        const double nodeWidth = 330.0;
+        const double nodeHeight = 160.0;
+
+        // 1. Récupération des dimensions réelles de la zone visible du canvas
+        // Si le conteneur n'a pas encore été mesuré par Blazor.Diagrams, on prend une taille de repli (ex: 1200x800)
+        double canvasWidth = Diagram.Container?.Width ?? 1200;
+        double canvasHeight = Diagram.Container?.Height ?? 800;
+
+        // 2. Coordonnées de l'écran vers le système de coordonnées du Diagramme :
+        // (Centre de l'écran - Pan) / Zoom
+        double zoom = Diagram.Zoom;
+        double centerX = ((canvasWidth / 2.0) - Diagram.Pan.X) / zoom;
+        double centerY = ((canvasHeight / 2.0) - Diagram.Pan.Y) / zoom;
+
+        // 3. Décalage pour que ce soit le CENTRE de la machine qui soit au milieu (et pas son coin supérieur gauche)
+        double targetX = centerX - (nodeWidth / 2.0);
+        double targetY = centerY - (nodeHeight / 2.0);
+
+        // 4. Instanciation du nœud à la position calculée
+        var machineNode = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
+
+        // 5. Ajout au diagramme et recalcul des flux
+        Diagram.Nodes.Add(machineNode);
+        //FlowEngine.RecalculateFlows(Diagram);
+
     }
 
 
