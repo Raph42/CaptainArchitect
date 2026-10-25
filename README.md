@@ -52,10 +52,12 @@ It enables players to visually place machines, connect inputs and outputs using 
 * Any modern web browser with WebAssembly support
 
 
-📦 Deployment (GitHub Pages)
+### 📦 Deployment (GitHub Pages)
 
 The project is structured to build and publish as a static site via GitHub Actions (.github/workflows/deploy.yml):
 
-📄 License
+---
+
+## 📄 License
 
 Distributed under the MIT License. Game assets, data, names, and artwork are property of Mafi Games.
