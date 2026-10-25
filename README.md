@@ -56,6 +56,8 @@ It enables players to visually place machines, connect inputs and outputs using 
 
 The project is structured to build and publish as a static site via GitHub Actions (.github/workflows/deploy.yml):
 
+* [.Direct link :](https://raph42.github.io/CaptainArchitect/
+
 ---
 
 ## 📄 License
