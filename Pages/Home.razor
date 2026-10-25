@@ -964,33 +964,35 @@
                     MachineId = node.CurrentMachineId,
                     Multiplier = node.Multiplier,
                     X = node.Position.X,
-                    Y = node.Position.Y
+                    Y = node.Position.Y,
+
+                    // Mémorisation de l'ordre exact actuel des entrées et des sorties
+                    OrderedInputProductIds = node.Recipe.Inputs.Select(i => i.ProductId).ToList(),
+                    OrderedOutputProductIds = node.Recipe.Outputs.Select(o => o.ProductId).ToList()
                 });
             }
 
-            // 2. Sauvegarde des liaisons entre les ports
+            // 2. Sauvegarde des liaisons (câbles / tuyaux)
             foreach (var link in Diagram.Links)
             {
-                if (link.Source is SinglePortAnchor srcAnchor && srcAnchor.Port != null &&
-                    link.Target is SinglePortAnchor tgtAnchor && tgtAnchor.Port != null)
+                // On vérifie que les ports sont bien des ResourcePortModel et rattachés à des MachineNodeModel
+                if (link.Source is SinglePortAnchor srcAnchor &&
+                    link.Target is SinglePortAnchor tgtAnchor &&
+                    srcAnchor.Port is ResourcePortModel srcPort &&
+                    tgtAnchor.Port is ResourcePortModel tgtPort &&
+                    srcPort.Parent is MachineNodeModel srcNode &&
+                    tgtPort.Parent is MachineNodeModel tgtNode)
                 {
-                    // On vérifie que les ports sont bien des ResourcePortModel et rattachés à des MachineNodeModel
-                    if (srcAnchor.Port is ResourcePortModel srcResPort &&
-                        tgtAnchor.Port is ResourcePortModel tgtResPort &&
-                        srcResPort.Parent is MachineNodeModel srcNode &&
-                        tgtResPort.Parent is MachineNodeModel tgtNode)
+                    saveData.Links.Add(new SavedLinkData
                     {
-                        saveData.Links.Add(new SavedLinkData
-                            {
-                                SourceNodeId = srcNode.Id,
-                                SourceProductId = srcResPort.ProductId,
-                                SourceDirection = srcResPort.Direction,
+                        SourceNodeId = srcNode.Id,
+                        SourceProductId = srcPort.ProductId,
+                        SourceDirection = srcPort.Direction,
 
-                                TargetNodeId = tgtNode.Id,
-                                TargetProductId = tgtResPort.ProductId,
-                                TargetDirection = tgtResPort.Direction
-                            });
-                    }
+                        TargetNodeId = tgtNode.Id,
+                        TargetProductId = tgtPort.ProductId,
+                        TargetDirection = tgtPort.Direction
+                    });
                 }
             }
 
@@ -1028,7 +1030,7 @@
                 return;
             }
 
-            // 1. Réinitialisation
+            // 1. Vider le diagramme actuel
             Diagram.Links.Clear();
             Diagram.Nodes.Clear();
 
@@ -1037,9 +1039,12 @@
             // 2. Recréation des machines
             foreach (var savedNode in saveData.Nodes)
             {
+                // Recherche de la recette dans les données chargées
                 var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
+                
                 if (recipe != null)
                 {
+                    // Instanciation de la machine à sa position d'origine
                     var node = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(savedNode.X, savedNode.Y))
                     {
                         Multiplier = savedNode.Multiplier
@@ -1051,12 +1056,16 @@
                         while (node.CurrentMachineId != savedNode.MachineId && node.Upgrade()) { }
                     }
 
+                    // RECONSTITUTION DE L'ORDRE DES PORTS
+                    node.ApplyCustomPortOrder(savedNode.OrderedInputProductIds, savedNode.OrderedOutputProductIds);
+
+
                     Diagram.Nodes.Add(node);
                     nodeMap[savedNode.NodeId] = node;
                 }
             }
 
-            // 3. Recréation des liens grâce au ProductId et à la Direction
+            // 3. Recréation des liens aux bons ports grâce au ProductId et à la Direction
             foreach (var savedLink in saveData.Links)
             {
                 if (nodeMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&

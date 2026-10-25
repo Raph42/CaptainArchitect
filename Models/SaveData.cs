@@ -6,7 +6,7 @@
 public class DiagramSaveData
 {
     // Version du format de sauvegarde au cas où la structure évolue
-    public string Version { get; set; } = "1.0";
+    public string Version { get; set; } = "1.1";
 
     // Liste des machines posées sur le diagramme
     public List<SavedNodeData> Nodes { get; set; } = new();
@@ -35,6 +35,12 @@ public class SavedNodeData
     // Coordonnées sur le canvas
     public double X { get; set; }
     public double Y { get; set; }
+
+    // Ordre personnalisé des entrées (liste ordonnée des ProductId)
+    public List<string> OrderedInputProductIds { get; set; } = new();
+
+    // Ordre personnalisé des sorties (liste ordonnée des ProductId)
+    public List<string> OrderedOutputProductIds { get; set; } = new();
 }
 
 
@@ -52,4 +58,5 @@ public class SavedLinkData
     public string TargetNodeId { get; set; } = string.Empty;
     public string TargetProductId { get; set; } = string.Empty;
     public PortDirection TargetDirection { get; set; }
+
 }

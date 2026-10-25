@@ -35,9 +35,19 @@ public class MachineNodeModel : NodeModel
     //    GetOutputRatePerMin(item) * OperationalEfficiency;
 
 
+    // 1. CONSTRUCTEUR
     public MachineNodeModel(Recipe recipe, Point? position = null) : base(position)
     {
-        Recipe = recipe;
+        //Recipe = recipe;
+
+        // On clone la recette pour que les inversions de listes soient propres à cette machine posée
+        Recipe = new Recipe(
+            recipe.RecipeId,
+            new List<RecipeItem>(recipe.Inputs),
+            new List<RecipeItem>(recipe.Outputs),
+            recipe.MachineBindings != null ? new List<MachineBinding>(recipe.MachineBindings) : new List<MachineBinding>()
+        );
+
         Title = recipe.RecipeId;
 
         // Initialise la durée sur la première machine disponible
@@ -316,6 +326,96 @@ public class MachineNodeModel : NodeModel
 
         // 7. Notifier le nœud pour mettre à jour l'affichage Blazor
         Refresh();
+    }
+
+
+
+    // =========================================================================
+    // RESTAURATION DE L'ORDRE PERSONNALISÉ DES PORTS (CHARGEMENT DE SAUVEGARDE)
+    // =========================================================================
+
+    /// <summary>
+    /// Réordonne les listes d'entrées et de sorties ainsi que les ports internes
+    /// pour correspondre exactement à l'ordre sauvegardé dans le fichier JSON.
+    /// </summary>
+    public void ApplyCustomPortOrder(List<string>? orderedInputs, List<string>? orderedOutputs)
+    {
+        bool changed = false;
+
+        // 1. Réordonner les entrées si un ordre personnalisé a été sauvegardé
+        if (orderedInputs != null && orderedInputs.Count == Recipe.Inputs.Count)
+        {
+            var newInputs = new List<RecipeItem>();
+            foreach (var pid in orderedInputs)
+            {
+                var item = Recipe.Inputs.FirstOrDefault(i => i.ProductId == pid);
+                if (item != null) newInputs.Add(item);
+            }
+
+            if (newInputs.Count == Recipe.Inputs.Count)
+            {
+                Recipe.Inputs.Clear();
+                Recipe.Inputs.AddRange(newInputs);
+                changed = true;
+            }
+        }
+
+        // 2. Réordonner les sorties si un ordre personnalisé a été sauvegardé
+        if (orderedOutputs != null && orderedOutputs.Count == Recipe.Outputs.Count)
+        {
+            var newOutputs = new List<RecipeItem>();
+            foreach (var pid in orderedOutputs)
+            {
+                var item = Recipe.Outputs.FirstOrDefault(o => o.ProductId == pid);
+                if (item != null) newOutputs.Add(item);
+            }
+
+            if (newOutputs.Count == Recipe.Outputs.Count)
+            {
+                Recipe.Outputs.Clear();
+                Recipe.Outputs.AddRange(newOutputs);
+                changed = true;
+            }
+        }
+
+        // 3. Si l'ordre a changé, réaligner la liste interne _ports du NodeModel
+        if (changed)
+        {
+            var currentInputPorts = Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Input)
+                                         .Cast<ResourcePortModel>()
+                                         .ToList();
+
+            var currentOutputPorts = Ports.Where(p => p is ResourcePortModel rp && rp.Direction == PortDirection.Output)
+                                          .Cast<ResourcePortModel>()
+                                          .ToList();
+
+            // Réordonne les ports d'entrée selon Recipe.Inputs
+            var sortedInputPorts = new List<PortModel>();
+            foreach (var inp in Recipe.Inputs)
+            {
+                var port = currentInputPorts.FirstOrDefault(p => p.ProductId == inp.ProductId);
+                if (port != null) sortedInputPorts.Add(port);
+            }
+
+            // Réordonne les ports de sortie selon Recipe.Outputs
+            var sortedOutputPorts = new List<PortModel>();
+            foreach (var outp in Recipe.Outputs)
+            {
+                var port = currentOutputPorts.FirstOrDefault(p => p.ProductId == outp.ProductId);
+                if (port != null) sortedOutputPorts.Add(port);
+            }
+
+            // Met à jour la collection interne des ports de Blazor.Diagrams
+            var allPortsField = typeof(NodeModel).GetField("_ports", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (allPortsField != null && allPortsField.GetValue(this) is List<PortModel> internalPortsList)
+            {
+                internalPortsList.Clear();
+                internalPortsList.AddRange(sortedInputPorts);
+                internalPortsList.AddRange(sortedOutputPorts);
+            }
+
+            Refresh();
+        }
     }
 
 
