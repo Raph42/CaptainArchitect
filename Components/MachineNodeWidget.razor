@@ -156,8 +156,29 @@ Dans Pages/Home.razor
         </div>
 
 
-        <!-- Centre : Icône machine -->
+        <!-- Centre : Efficacité en pourcentage + Icône machine -->
         <div class="machine-center-icon">
+
+            @* Calcul du pourcentage d'efficacité réelle (OperationalEfficiency allant de 0 à 1) *@
+            @{
+                var effPct = Math.Round(Node.OperationalEfficiency * 100m, 0);
+
+                // Classe de couleur dynamique selon le rendement :
+                // - Vert si 100% (tourne à plein régime)
+                // - Rouge si < 100% (goulot d'étranglement ou sous-alimenté)
+                // - Grisé si à l'arrêt complet (0%)
+                var effClass = effPct >= 100m ? "eff-ok" 
+                             : effPct > 0m ? "eff-warning" 
+                             : "eff-zero";
+            }
+
+            <!-- Badge d'efficacité positionné AU-DESSUS de l'icône -->
+            <span class="machine-efficiency-badge @effClass" 
+                  title="Real Efficiency: @effPct% (based on the sourcing of inputs)">
+                @effPct%
+            </span>
+
+            <!-- Icône du bâtiment -->
             <MudTooltip Text="@MachineTooltip" Arrow="true" Placement="Placement.Top">
                 <div class="building-icon-wrapper">
                     <img src="@MachineImagePath" 
@@ -170,6 +191,7 @@ Dans Pages/Home.razor
                     </div>
                 </div>
             </MudTooltip>
+
         </div>
 
 
@@ -203,6 +225,12 @@ Dans Pages/Home.razor
                     // Bilan : ce qu'on produit réellement moins ce que demande l'aval
                     var balance = actualProduced - downstreamDemand;
 
+                    // Calcul du pourcentage d'efficacité de cette sortie (0% à 100%)
+                    // Si le débit théorique est nul, on évite la division par zéro
+                    var effPercent = theoreticalRate > 0 
+                        ? Math.Round((actualProduced / theoreticalRate) * 100m, 0) 
+                        : 100m;
+
                     // Statut couleur :
                     // - Gris si non connecté
                     // - Rouge si déficit
@@ -229,9 +257,10 @@ Dans Pages/Home.razor
 
 
                             @* Ligne 2 : Toujours affichée (affiche 0/m en gris si non connecté, ou le débit réel distribué) *@
-                            <span class="rate-actual @statusClass" title="Flow distributed to downstream machines">
+                            <span class="rate-actual @statusClass" title="Flow distributed (Efficiency : @effPercent%)">
                                 @*  @(hasLinks ? distributedRate.ToString("0.#") : "0")/m  *@
                                 @((hasLinks ? distributedRate : actualProduced).ToString("0.#"))/m
+
                             </span>
 
 
@@ -493,14 +522,43 @@ Dans Pages/Home.razor
         box-sizing: border-box;
     }
 
-    /* 6. Le centre : parfaitement figé */
+    /* Centre : empile verticalement le badge d'efficacité et l'icône */
     .machine-center-icon {
         display: flex;
+        flex-direction: column; /* Empilement vertical */
         align-items: center;
         justify-content: center;
-        flex: 1; /* Reste centré entre les deux colonnes de 130px */
+        gap: 3px;               /* Espace entre le badge et le haut de l'image */
+        flex: 1;
         min-width: 60px;
         flex-shrink: 0;
+    }
+
+    /* Badge de pourcentage d'efficacité au-dessus de l'icône */
+    .machine-efficiency-badge {
+        font-size: 0.70rem;
+        font-weight: 700;
+        line-height: 1;
+        padding: 1px 6px;
+        border-radius: 4px;
+        letter-spacing: 0.3px;
+        user-select: none;
+    }
+
+    /* Couleurs selon l'état d'efficacité */
+    .machine-efficiency-badge.eff-ok {
+        color: #4ade80;                      /* Vert */
+        background: rgba(74, 222, 128, 0.15); /* Léger halo vert */
+    }
+
+    .machine-efficiency-badge.eff-warning {
+        color: #f87171;                      /* Rouge (goulot d'étranglement) */
+        background: rgba(248, 113, 113, 0.15);
+    }
+
+    .machine-efficiency-badge.eff-zero {
+        color: #9ca3af;                      /* Gris neutre */
+        background: rgba(156, 163, 175, 0.15);
     }
 
     .building-icon-wrapper {
