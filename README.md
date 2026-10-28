@@ -9,6 +9,7 @@ It enables players to visually place machines, connect inputs and outputs using 
 ## 📸 Preview
 
 ![CaptainArchitect Screenshot](Docs/Screenshot01.png)
+![CaptainArchitect Screenshot](Docs/Screenshot02.png)
 
 ---
 
