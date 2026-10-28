@@ -1,5 +1,8 @@
 ﻿@inherits LayoutComponentBase
 
+@using CaptainArchitect.Services
+@inject LanguageService LangService
+
 <MudThemeProvider IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -8,7 +11,10 @@
 <MudLayout Style="height: 100vh; width: 100vw; overflow: hidden; background-color: #18181b;">
     <!-- Barre supérieure -->
     <MudAppBar Elevation="1" Dense="true" Style="background-color: #18181b; border-bottom: 1px solid #2d2d2d;">
-        <MudText Typo="Typo.h6" Class="fw-bold" Style="color: #38bdf8;">CaptainArchitect</MudText>
+        <MudText Typo="Typo.h6" Class="fw-bold" Style="color: #38bdf8;">
+            CaptainArchitect @LanguageService.AppVersion
+        </MudText>
+        
         <MudSpacer />
     </MudAppBar>
 

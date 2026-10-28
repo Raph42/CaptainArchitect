@@ -13,4 +13,7 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<ResourceService>();
 
+// Enregistrement du service de langue en Singleton
+builder.Services.AddSingleton<LanguageService>();
+
 await builder.Build().RunAsync();
