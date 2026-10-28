@@ -15,15 +15,23 @@ Dans Pages/Home.razor
 @inject ResourceService ResourceService
 
 
-<div class="machine-card @(Node.Selected ? "selected" : "")"
+<div class="machine-card @(Node.Selected ? "selected" : "") @(Node.IsPaused ? "is-paused" : "")"
 
     @oncontextmenu="OnRightClick" 
     @oncontextmenu:preventDefault="true">
 
-    <!-- En-tête : Nom de la machine + Boutons Upgrade/Downgrade à gauche, Contrôles Multiplier + Croix à droite -->
+    <!-- Bandeau bien visible quand la machine est arrêtée -->
+    @if (Node.IsPaused)
+    {
+        <div class="pause-banner">
+            <span>⏸ PAUSED</span>
+        </div>
+    }
+
+    <!-- En-tête : Nom de la machine + Boutons Upgrade/Downgrade à gauche, Contrôles Multiplier + Bouton Pause + Croix à droite -->
 
     <div class="machine-header">
-        <div class="d-flex align-center">
+        <div class="d-flex align-center gap-1">
 
             <!-- Nom de la machine (au lieu du nom de la recette) -->
             <span class="machine-title @GetMachineTierClass()" title="@MachineDisplayName (@Node.Recipe.RecipeId)">
@@ -48,7 +56,6 @@ Dans Pages/Home.razor
                 </div>
             }
 
-
         </div>
 
         <!-- Conteneur poussé tout à droite -->
@@ -59,6 +66,26 @@ Dans Pages/Home.razor
                 <span class="multiplier-count">@Node.Multiplier.ToString("0.##")x</span>
                 <button class="btn-step" @onclick="IncreaseCount">+</button>
             </div>
+
+
+            <!-- BOUTON PAUSE / REPRISE -->
+            <button class="btn-pause @(Node.IsPaused ? "active" : "")" 
+                    title="@(Node.IsPaused ? "Reprendre la production" : "Mettre en pause")" 
+                    @onclick="TogglePause"
+                    @onclick:stopPropagation="true">
+                @if (Node.IsPaused)
+                {
+                    <!-- Icône Reprendre (Play) -->
+                    <span>▶</span>
+                }
+                else
+                {
+                    <!-- Icône Pause -->
+                    <span>⏸</span>
+                }
+            </button>
+
+
             <!-- 2. Croix rouge immédiatement à sa droite Bouton supprimer -->
             <button class="btn-delete" title="Supprimer la machine" @onclick="DeleteNode">✕</button>
         </div>
@@ -744,6 +771,65 @@ Dans Pages/Home.razor
         text-shadow: 0 0 6px rgba(34, 211, 238, 0.3);
     }
 
+    /* Bouton Pause dans l'en-tête */
+    .btn-pause {
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 4px;
+        color: #a1a1aa;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        transition: all 0.2s ease;
+        padding: 0;
+    }
+
+    .btn-pause:hover {
+        background: #3f3f46;
+        color: #f4f4f5;
+    }
+
+    /* Bouton actif (quand la machine est arrêtée) */
+    .btn-pause.active {
+        background: rgba(239, 68, 68, 0.25);
+        border-color: #ef4444;
+        color: #f87171;
+    }
+
+    /* --- Mise en évidence de la carte en pause --- */
+
+    .machine-card.is-paused {
+        border-color: #f59e0b !important; /* Contour orange ambre */
+        box-shadow: 0 0 12px rgba(245, 158, 11, 0.35) !important;
+    }
+
+    /* Grise légèrement l'intérieur du corps de la machine pour montrer l'inactivité */
+    .machine-card.is-paused .machine-body {
+        opacity: 0.55;
+        filter: grayscale(40%);
+    }
+
+    /* Bandeau au sommet de la machine */
+    .pause-banner {
+        background: linear-gradient(90deg, #b45309, #d97706, #b45309);
+        color: #fff;
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-align: center;
+        letter-spacing: 1px;
+        padding: 2px 0;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        user-select: none;
+        box-shadow: inset 0 -1px 2px rgba(0,0,0,0.3);
+    }
+
+
 </style>
 
 @code {
@@ -927,6 +1013,14 @@ Dans Pages/Home.razor
 
         // Tier 1 par défaut
         return 1;
+    }
+
+
+    // Bascule l'état de pause et recalcule immédiatement les flux
+    private void TogglePause()
+    {
+        Node.IsPaused = !Node.IsPaused;
+        FlowEngine.RecalculateFlows(Diagram);
     }
 
 

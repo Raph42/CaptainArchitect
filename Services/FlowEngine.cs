@@ -40,6 +40,13 @@ public static class FlowEngine
         // 3. Calcul du taux d'activité (Efficiency) selon les entrées connectées
         foreach (var node in machineNodes)
         {
+            // Si en pause, l'efficacité opérationnelle passe à 0
+            if (node.IsPaused)
+            {
+                node.OperationalEfficiency = 0m;
+                continue;
+            }
+
             var connectedInputPorts = node.Ports.OfType<ResourcePortModel>()
                 .Where(p => p.Direction == PortDirection.Input && p.Links.Count > 0)
                 .ToList();
@@ -105,9 +112,15 @@ public static class FlowEngine
                 var outputItem = sourceNode.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
                 if (outputItem == null) continue;
 
-                decimal availableRate = useActualProduction
-                    ? sourceNode.GetActualProducedRatePerMin(outputItem)
-                    : sourceNode.GetOutputRatePerMin(outputItem);
+                // Si la machine source est en pause, sa production est nulle
+                decimal availableRate = 0m;
+
+                if (!sourceNode.IsPaused)
+                {
+                    availableRate = useActualProduction
+                        ? sourceNode.GetActualProducedRatePerMin(outputItem)
+                        : sourceNode.GetOutputRatePerMin(outputItem);
+                }
 
                 // Recherche des ports cibles connectés via diagram.Links
                 var connectedTargetPorts = diagram.Links
@@ -128,7 +141,14 @@ public static class FlowEngine
                     if (targetPort.Parent is MachineNodeModel targetNode)
                     {
                         var reqItem = targetNode.Recipe.Inputs.FirstOrDefault(inp => inp.ProductId == targetPort.ProductId);
-                        decimal demand = reqItem != null ? targetNode.GetInputRatePerMin(reqItem) : 0m;
+
+                        //decimal demand = reqItem != null ? targetNode.GetInputRatePerMin(reqItem) : 0m;
+
+                        // Si la machine cible est en pause, elle ne consomme rien : la demande est de 0m
+                        decimal demand = (reqItem != null && !targetNode.IsPaused)
+                            ? targetNode.GetInputRatePerMin(reqItem)
+                            : 0m;
+
                         targetDemands[targetPort] = demand;
                         totalDemand += demand;
                     }

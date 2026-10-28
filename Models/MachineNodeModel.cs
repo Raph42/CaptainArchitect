@@ -13,6 +13,9 @@ public class MachineNodeModel : NodeModel
     public Recipe Recipe { get; }
     public decimal Multiplier { get; set; } = 1.0m;
 
+    // État de pause de la machine
+    public bool IsPaused { get; set; } = false;
+
     // Index de la machine actuellement sélectionnée dans Recipe.MachineBindings
     public int CurrentBindingIndex { get; private set; } = 0;
 
