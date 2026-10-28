@@ -43,6 +43,7 @@ It enables players to visually place machines, connect inputs and outputs using 
 * **UI Components**: [MudBlazor](https://mudblazor.com/)
 * **Diagramming Engine**: [Blazor.Diagrams (ZBlazor)](https://github.com/Blazor-Diagrams/Blazor.Diagrams)
 * **Game Data**: Extracted from *Captain of Industry* (recipes, machines, products, and icons).
+  [CoiDataExtractor](https://github.com/Raph42/CoiDataExtractor)
 
 ---
 
