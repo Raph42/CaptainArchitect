@@ -3,6 +3,9 @@
 @using CaptainArchitect.Services
 @inject LanguageService LangService
 
+@inject ResourceService ResourceService
+@implements IDisposable
+
 <MudThemeProvider IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -14,8 +17,27 @@
         <MudText Typo="Typo.h6" Class="fw-bold" Style="color: #38bdf8;">
             CaptainArchitect @LanguageService.AppVersion
         </MudText>
-        
+
+        <!-- Espaceur pour pousser les indicateurs et actions -->
         <MudSpacer />
+
+        <!-- Indicateur global : Total Ouvriers -->
+        <MudTooltip Text="Main-d'œuvre totale requise par toutes les machines posées" Placement="Placement.Bottom" Arrow="true">
+            <div class="global-stat-chip">
+                <MudIcon Icon="@Icons.Material.Filled.People" Class="stat-icon-workers" />
+                <span class="stat-value">@ResourceService.TotalWorkers</span>
+                <span class="stat-unit">ouvriers</span>
+            </div>
+        </MudTooltip>
+
+        <!-- Indicateur global : Consommation Électrique Totale -->
+        <MudTooltip Text="Consommation électrique cumulée de l'usine" Placement="Placement.Bottom" Arrow="true">
+            <div class="global-stat-chip">
+                <MudIcon Icon="@Icons.Material.Filled.Bolt" Class="stat-icon-power" />
+                <span class="stat-value">@FormatPower(ResourceService.TotalPowerKw)</span>
+            </div>
+        </MudTooltip>
+
     </MudAppBar>
 
     <!-- Zone principale -->
@@ -23,3 +45,80 @@
         @Body
     </MudMainContent>
 </MudLayout>
+
+
+
+<style>
+    /* Badge compact pour les statistiques globales dans l'AppBar */
+    .global-stat-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        padding: 4px 10px;
+        border-radius: 16px;
+        color: #f4f4f5;
+        font-size: 0.82rem;
+        user-select: none;
+    }
+
+    .stat-icon-workers {
+        font-size: 1.1rem !important;
+        color: #93c5fd; /* Bleu clair */
+    }
+
+    .stat-icon-power {
+        font-size: 1.15rem !important;
+        color: #facc15; /* Jaune électrique */
+    }
+
+    .stat-value {
+        font-weight: 700;
+        letter-spacing: 0.3px;
+    }
+
+    .stat-unit {
+        color: #a1a1aa;
+        font-size: 0.75rem;
+    }
+</style>
+
+
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Abonnement au changement de statistiques pour rafraîchir l'AppBar
+        ResourceService.OnGlobalStatsChanged += HandleStatsChanged;
+    }
+
+
+    private void HandleStatsChanged()
+    {
+        // Force le réaffichage du composant Layout
+        InvokeAsync(StateHasChanged);
+    }
+
+
+    /// <summary>
+    /// Formate la puissance électrique globale en kW ou en MW
+    /// </summary>
+    private string FormatPower(decimal powerKw)
+    {
+        if (powerKw == 0m) return "0 kW";
+        if (powerKw >= 1000m)
+        {
+            return $"{(powerKw / 1000m):0.##} MW";
+        }
+        return $"{powerKw:0.##} kW";
+    }
+
+
+    public void Dispose()
+    {
+        // Nettoyage de l'abonnement mémoire
+        ResourceService.OnGlobalStatsChanged -= HandleStatsChanged;
+    }
+
+}

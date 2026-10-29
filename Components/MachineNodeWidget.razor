@@ -342,7 +342,32 @@ Dans Pages/Home.razor
             }
         </div>
     </div>
+
+
+
+    <!-- Pied de carte : Consommation électrique et Total ouvriers -->
+    <div class="machine-footer">
+        <!-- Section Ouvriers -->
+        <div class="stat-item" title="Main-d'œuvre requise (@CurrentMachine?.Workers ouvriers/machine)">
+            <MudIcon Icon="@Icons.Material.Filled.People" Class="stat-icon" />
+            <span class="stat-value">@(Node.GetTotalWorkers(CurrentMachine?.Workers ?? 0))</span>
+        </div>
+
+        <!-- Séparateur discret -->
+        <span class="stat-divider">|</span>
+
+        <!-- Section Électricité -->
+        <div class="stat-item" title="Consommation électrique totale (@CurrentMachine?.ElectricityConsumptionKW kW/machine)">
+            <MudIcon Icon="@Icons.Material.Filled.Bolt" Class="stat-icon bolt" />
+            <span class="stat-value">@FormatPower(Node.GetTotalPowerKw(CurrentMachine?.ElectricityConsumptionKW ?? 0))</span>
+        </div>
+    </div>
+
+
 </div>
+
+
+
 
 <style>
     /* 1. Largeur STRICTEMENT FIXE pour la carte de la machine */
@@ -830,6 +855,48 @@ Dans Pages/Home.razor
     }
 
 
+    /* Pied de la machine */
+    .machine-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        background: #18181b;
+        padding: 3px 8px;
+        border-bottom-left-radius: 6px;
+        border-bottom-right-radius: 6px;
+        border-top: 1px solid #3f3f46;
+        font-size: 0.72rem;
+    }
+
+    /* Éléments statistiques */
+    .stat-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #d4d4d8;
+        user-select: none;
+    }
+
+    .stat-icon {
+        font-size: 0.95rem !important;
+        color: #9ca3af;
+    }
+
+    /* Éclair jaune pour l'électricité */
+    .stat-icon.bolt {
+        color: #facc15;
+    }
+
+    .stat-value {
+        font-weight: 600;
+        letter-spacing: 0.2px;
+    }
+
+    .stat-divider {
+        color: #3f3f46;
+        user-select: none;
+    }
+
 </style>
 
 @code {
@@ -865,7 +932,7 @@ Dans Pages/Home.razor
     {
         Node.Multiplier += 1m;
         //Node.Refresh();
-        FlowEngine.RecalculateFlows(Diagram);
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
     }
 
 
@@ -875,7 +942,7 @@ Dans Pages/Home.razor
         {
             Node.Multiplier -= 1m;
             //Node.Refresh();
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
     }
 
@@ -884,7 +951,7 @@ Dans Pages/Home.razor
     {
         if (Node.Upgrade())
         {
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
     }
 
@@ -893,7 +960,7 @@ Dans Pages/Home.razor
     {
         if (Node.Downgrade())
         {
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
     }
 
@@ -916,7 +983,7 @@ Dans Pages/Home.razor
         if (Node.CanMoveInputUp(index))
         {
             Node.SwapInputs(index, index - 1);
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
             
             // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
             await Task.Yield();
@@ -933,7 +1000,7 @@ Dans Pages/Home.razor
         if (Node.CanMoveInputDown(index))
         {
             Node.SwapInputs(index, index + 1);
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
             
             // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
             await Task.Yield();
@@ -950,7 +1017,7 @@ Dans Pages/Home.razor
         if (Node.CanMoveOutputUp(index))
         {
             Node.SwapOutputs(index, index - 1);
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
             
             // Laisse un cycle de rendu au navigateur pour repositionner les éléments HTML
             await Task.Yield();
@@ -967,7 +1034,7 @@ Dans Pages/Home.razor
         if (Node.CanMoveOutputDown(index))
         {
             Node.SwapOutputs(index, index + 1);
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
             
             // Laisse un cycle de rendu au navigateur pour repositionner les éléments HTML
             await Task.Yield();
@@ -1020,7 +1087,22 @@ Dans Pages/Home.razor
     private void TogglePause()
     {
         Node.IsPaused = !Node.IsPaused;
-        FlowEngine.RecalculateFlows(Diagram);
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+    }
+
+
+
+    /// <summary>
+    /// Formate la puissance électrique pour afficher proprement en kW ou en MW.
+    /// </summary>
+    private string FormatPower(decimal powerKw)
+    {
+        if (powerKw == 0) return "0 kW";
+        if (powerKw >= 1000m)
+        {
+            return $"{(powerKw / 1000m):0.##} MW";
+        }
+        return $"{powerKw:0.##} kW";
     }
 
 

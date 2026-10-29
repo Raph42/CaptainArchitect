@@ -422,4 +422,25 @@ public class MachineNodeModel : NodeModel
     }
 
 
+    /// <summary>
+    /// Calcule le nombre total d'ouvriers nécessaires pour cette machine
+    /// en fonction de la machine sélectionnée et du multiplicateur.
+    /// </summary>
+    /// <param name="baseWorkers">Nombre d'ouvriers de base de la machine</param>
+    public int GetTotalWorkers(int baseWorkers)
+    {
+        // On arrondit vers le haut si multiplicateur décimal ou produit direct
+        return (int)Math.Ceiling(baseWorkers * Multiplier);
+    }
+
+    /// <summary>
+    /// Calcule la consommation électrique totale en kW selon le multiplicateur.
+    /// </summary>
+    /// <param name="basePowerKw">Puissance unitaire de base en kW</param>
+    public decimal GetTotalPowerKw(decimal basePowerKw)
+    {
+        return basePowerKw * Multiplier;
+    }
+
+
 }

@@ -9,7 +9,7 @@ namespace CaptainArchitect.Services;
 
 public static class FlowEngine
 {
-    public static void RecalculateFlows(BlazorDiagram diagram)
+    public static void RecalculateFlows(BlazorDiagram diagram, ResourceService resourceService)
     {
         var machineNodes = diagram.Nodes.OfType<MachineNodeModel>().ToList();
 
@@ -97,6 +97,30 @@ public static class FlowEngine
             //}
         }
 
+
+
+        // =========================================================================
+        // Calcul automatique des totaux ouvriers et électricité
+        // =========================================================================
+        int totalWorkers = 0;
+        decimal totalPowerKw = 0m;
+
+        foreach (var node in machineNodes)
+        {
+            // Récupération des données réelles de la machine (Workers, Power)
+            var machine = resourceService.GetMachine(node.CurrentMachineId);
+            if (machine != null)
+            {
+                // Multiplié par le nombre de machines (Multiplier)
+                totalWorkers += (int)Math.Ceiling(machine.Workers * node.Multiplier);
+                totalPowerKw += machine.ElectricityConsumptionKW * node.Multiplier;
+            }
+        }
+
+        // Notifie l'AppBar (MainLayout) via l'événement dans ResourceService
+        resourceService.UpdateGlobalStats(totalWorkers, totalPowerKw);
+
+        // Rafraîchit le canevas SVG
         diagram.Refresh();
 
     }
@@ -180,6 +204,7 @@ public static class FlowEngine
             }
         }
     }
+
 
 
 }

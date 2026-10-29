@@ -763,7 +763,6 @@
     }
 
 
-
     protected override async Task OnInitializedAsync()
     {
         // 1. Chargement des données globales
@@ -855,18 +854,17 @@
         // Abonne le moteur de calcul aux événements d'ajout/suppression de liens et de nœuds
         Diagram.Links.Added += link => 
         {
-            link.TargetAttached += _ => FlowEngine.RecalculateFlows(Diagram);
-            link.Changed += _ => FlowEngine.RecalculateFlows(Diagram);
+            link.TargetAttached += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
+            link.Changed += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
         };
 
         // Diagram.Links.Removed += link => FlowEngine.RecalculateFlows(Diagram);
         // Diagram.Nodes.Removed += node => FlowEngine.RecalculateFlows(Diagram);
-        Diagram.Links.Removed += _ => FlowEngine.RecalculateFlows(Diagram);
-        Diagram.Nodes.Removed += _ => FlowEngine.RecalculateFlows(Diagram);
+        Diagram.Links.Removed += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        Diagram.Nodes.Removed += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
 
         // Recalcul initial
-        FlowEngine.RecalculateFlows(Diagram);
-
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
 
         // Enregistre le composant personnalisé pour les nœuds de machine
         Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
@@ -1015,7 +1013,7 @@
         // Supprime tous les liens puis tous les nœuds
         Diagram.Links.Clear();
         Diagram.Nodes.Clear();
-        FlowEngine.RecalculateFlows(Diagram);
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
         StateHasChanged();
     }
 
@@ -1214,7 +1212,7 @@
             }
 
             // 4. Recalcul des flux
-            FlowEngine.RecalculateFlows(Diagram);
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
             StateHasChanged();
 
             Snackbar.Add("Diagram successfully loaded !", Severity.Success);
