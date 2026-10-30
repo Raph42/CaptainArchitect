@@ -348,7 +348,7 @@ Dans Pages/Home.razor
     <!-- Pied de carte : Consommation électrique et Total ouvriers -->
     <div class="machine-footer">
         <!-- Section Ouvriers -->
-        <div class="stat-item" title="Main-d'œuvre requise (@CurrentMachine?.Workers ouvriers/machine)">
+        <div class="stat-item" title="Labor required (@CurrentMachine?.Workers workers/machine)">
             <MudIcon Icon="@Icons.Material.Filled.People" Class="stat-icon" />
             <span class="stat-value">@(Node.GetTotalWorkers(CurrentMachine?.Workers ?? 0))</span>
         </div>
@@ -357,7 +357,7 @@ Dans Pages/Home.razor
         <span class="stat-divider">|</span>
 
         <!-- Section Électricité -->
-        <div class="stat-item" title="Consommation électrique totale (@CurrentMachine?.ElectricityConsumptionKW kW/machine)">
+        <div class="stat-item" title="Total electricity consumption (@CurrentMachine?.ElectricityConsumptionKW kW/machine)">
             <MudIcon Icon="@Icons.Material.Filled.Bolt" Class="stat-icon bolt" />
             <span class="stat-value">@FormatPower(Node.GetTotalPowerKw(CurrentMachine?.ElectricityConsumptionKW ?? 0))</span>
         </div>

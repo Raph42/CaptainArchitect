@@ -22,16 +22,16 @@
         <MudSpacer />
 
         <!-- Indicateur global : Total Ouvriers -->
-        <MudTooltip Text="Main-d'œuvre totale requise par toutes les machines posées" Placement="Placement.Bottom" Arrow="true">
+        <MudTooltip Text="Total labor required for all installed machines" Placement="Placement.Bottom" Arrow="true">
             <div class="global-stat-chip">
                 <MudIcon Icon="@Icons.Material.Filled.People" Class="stat-icon-workers" />
                 <span class="stat-value">@ResourceService.TotalWorkers</span>
-                <span class="stat-unit">ouvriers</span>
+                <span class="stat-unit">workers</span>
             </div>
         </MudTooltip>
 
         <!-- Indicateur global : Consommation Électrique Totale -->
-        <MudTooltip Text="Consommation électrique cumulée de l'usine" Placement="Placement.Bottom" Arrow="true">
+        <MudTooltip Text="Cumulative electricity consumption of the factory" Placement="Placement.Bottom" Arrow="true">
             <div class="global-stat-chip">
                 <MudIcon Icon="@Icons.Material.Filled.Bolt" Class="stat-icon-power" />
                 <span class="stat-value">@FormatPower(ResourceService.TotalPowerKw)</span>
