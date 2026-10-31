@@ -53,13 +53,10 @@ public class ResourceService
         _machines.TryGetValue(machineId, out var machine) ? machine : null;
 
 
-
-
     /// <summary>
     /// Total d'ouvriers requis par l'ensemble des machines posées.
     /// </summary>
     public int TotalWorkers { get; private set; } = 0;
-
 
 
     /// <summary>
@@ -68,12 +65,10 @@ public class ResourceService
     public decimal TotalPowerKw { get; private set; } = 0m;
 
 
-
     /// <summary>
     /// Événement déclenché lors du recalcul des statistiques globales de l'usine.
     /// </summary>
     public event Action? OnGlobalStatsChanged;
-
 
 
     /// <summary>
@@ -89,6 +84,26 @@ public class ResourceService
         OnGlobalStatsChanged?.Invoke();
     }
 
+
+    /// <summary>
+    /// Version de l'extracteur du JSON (_generator).
+    /// </summary>
+    public string? JsonGeneratorVersion { get; private set; }
+
+    /// <summary>
+    /// Version du jeu (gameVersion).
+    /// </summary>
+    public string? GameVersion { get; private set; }
+
+    /// <summary>
+    /// Enregistre les métadonnées de version du JSON et notifie l'interface.
+    /// </summary>
+    public void SetVersions(string? generator, string? gameVersion)
+    {
+        JsonGeneratorVersion = generator;
+        GameVersion = gameVersion;
+        OnGlobalStatsChanged?.Invoke(); // Notifie MainLayout pour réactualiser l'en-tête
+    }
 
 
 }

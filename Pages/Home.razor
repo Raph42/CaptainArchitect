@@ -771,6 +771,9 @@
             // Chargement du fichier unique
             var data = await Http.GetFromJsonAsync<CoiData>("data/captain_of_industry_data.json");
 
+            // Enregistrement des versions du JSON et du jeu dans le service
+            ResourceService.SetVersions(data.Generator, data.GameVersion);
+
             if (data != null)
             {
                 if (data.Products != null)

@@ -1,7 +1,10 @@
-﻿namespace CaptainArchitect.Models;
+﻿using System.Text.Json.Serialization;
+
+namespace CaptainArchitect.Models;
 
 // Conteneur racine du fichier JSON
 public record CoiData(
+    [property: JsonPropertyName("_generator")] string? Generator,
     string GameVersion,
     List<Product> Products,
     List<Machine> Machines,
