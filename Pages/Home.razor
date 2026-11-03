@@ -92,10 +92,28 @@
                            OnClick="ClearDiagram">
                     Clear
                 </MudButton>
+
+
             </div>
 
 
-
+            <!-- Exemple de bouton dans la barre d'outils -->
+            <MudMenu Label="Add Storage"
+                     StartIcon="@Icons.Material.Filled.Inventory2"
+                     Variant="Variant.Filled"
+                     Color="Color.Info"
+                     Size="MudBlazor.Size.Small"
+                     Dense="true">
+                @foreach (var prod in ProductDict.Values.OrderBy(p => p.Name))
+                {
+                    <MudMenuItem OnClick="@(() => AddStorageNode(prod.Id))">
+                        <div class="d-flex align-center gap-2">
+                            <ResourceBadge ProductId="@prod.Id" />
+                            <span>@prod.Name</span>
+                        </div>
+                    </MudMenuItem>
+                }
+            </MudMenu>
 
 
             <!-- HISTORIQUE DES DERNIÈRES RECHERCHES -->
@@ -195,6 +213,7 @@
                 <MudToggleItem Value="ResourceFilterMode.Input" Text="Input" Class="flex-grow-1 text-center" />
                 <MudToggleItem Value="ResourceFilterMode.Output" Text="Output" Class="flex-grow-1 text-center" />
             </MudToggleGroup>
+
         </div>
 
         <!-- 2. ZONE SCROLLABLE DE LA LISTE -->
@@ -213,7 +232,7 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.AddCircle"
                                                Color="Color.Primary"
                                                Size="MudBlazor.Size.Small"
-                                               Title="Ajouter sur le diagramme"
+                                               Title="Add to the diagram"
                                                OnClick="@(() => AddRecipeNode(recipe))" />
                             </div>
 
@@ -872,6 +891,9 @@
         // Enregistre le composant personnalisé pour les nœuds de machine
         Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
 
+		// Enregistre le composant personnalisé pour les nœuds de stockage
+        Diagram.RegisterComponent<StorageNodeModel, StorageNodeWidget>();
+
         // Enregistre le rendu visuel de notre lien personnalisé
         Diagram.RegisterComponent<ResourceLinkModel, ResourceLinkWidget>();
 
@@ -1047,16 +1069,30 @@
                 });
             }
 
-            // 2. Sauvegarde des liaisons (câbles / tuyaux)
+
+            // 2. Sauvegarde de tous les stockages (StorageNodeModel)
+            foreach (var storage in Diagram.Nodes.OfType<StorageNodeModel>())
+            {
+                saveData.Storages.Add(new SavedStorageData
+                {
+                    NodeId = storage.Id,
+                    ProductId = storage.ProductId,
+                    X = storage.Position.X,
+                    Y = storage.Position.Y
+                });
+            }
+
+
+            // 3. Sauvegarde de toutes les liaisons (câbles / tuyaux)
+            // Fonctionne indifféremment entre Machines et Stockages (Machine -> Machine, Machine -> Stockage, Stockage -> Machine)
             foreach (var link in Diagram.Links)
             {
-                // On vérifie que les ports sont bien des ResourcePortModel et rattachés à des MachineNodeModel
                 if (link.Source is SinglePortAnchor srcAnchor &&
-                    link.Target is SinglePortAnchor tgtAnchor &&
                     srcAnchor.Port is ResourcePortModel srcPort &&
+                    link.Target is SinglePortAnchor tgtAnchor &&
                     tgtAnchor.Port is ResourcePortModel tgtPort &&
-                    srcPort.Parent is MachineNodeModel srcNode &&
-                    tgtPort.Parent is MachineNodeModel tgtNode)
+                    srcPort.Parent is NodeModel srcNode &&
+                    tgtPort.Parent is NodeModel tgtNode)
                 {
                     saveData.Links.Add(new SavedLinkData
                     {
@@ -1071,7 +1107,7 @@
                 }
             }
 
-            // 3. Sérialisation et téléchargement du JSON
+            // 4. Sérialisation et téléchargement du JSON
             var jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = true });
             var fileName = $"factory_{DateTime.Now:yyyyMMdd_HHmmss}.json";
             await JS.InvokeVoidAsync("downloadFileFromText", fileName, jsonString);
@@ -1086,8 +1122,11 @@
 
     }
 
+
+
     /// <summary>
-    /// Charge le diagramme depuis un fichier JSON sélectionné
+    /// Charge et reconstruit le diagramme depuis un fichier JSON sélectionné par l'utilisateur.
+    /// Recrée les machines, les stockages et rétablit tous les liens.
     /// </summary>
     private async Task LoadDiagram(InputFileChangeEventArgs e)
     {
@@ -1096,7 +1135,7 @@
 
         try
         {
-            // 0. Initialisation de l'état de chargement
+            // 1. Initialisation de l'état de chargement
             _isLoadingDiagram = true;
             _loadingProgress = 0;
             _loadingStatusText = "Reading the file...";
@@ -1112,21 +1151,22 @@
                 return;
             }
 
-            // 1. Vider le diagramme actuel
+            // 2. Vider le diagramme actuel
             Diagram.Links.Clear();
             Diagram.Nodes.Clear();
 
-            var nodeMap = new Dictionary<string, MachineNodeModel>();
+            // Dictionnaire unifié pour mapper les anciens ID vers les nouvelles instances de NodeModel (Machines OU Stockages)
+            var allNodesMap = new Dictionary<string, NodeModel>();
 
 			// Variables pour le suivi de l'avancement
             int totalNodes = saveData.Nodes.Count;
+            int totalStorages = saveData.Storages.Count;
             int totalLinks = saveData.Links.Count;
             int totalOperations = (totalNodes + totalLinks) > 0 ? (totalNodes + totalLinks) : 1;
             int currentStep = 0;
 
 
-            // 2. Recréation des machines
-            //foreach (var savedNode in saveData.Nodes)
+            // 3. Recréation des machines (MachineNodeModel)
             for (int i = 0; i < totalNodes; i++)
             {
                 var savedNode = saveData.Nodes[i];
@@ -1152,7 +1192,7 @@
 
 
                     Diagram.Nodes.Add(node);
-                    nodeMap[savedNode.NodeId] = node;
+                    allNodesMap[savedNode.NodeId] = node;
                 }
 
 
@@ -1168,21 +1208,46 @@
 
             }
 
-            // 3. Recréation des liens aux bons ports grâce au ProductId et à la Direction
-            //foreach (var savedLink in saveData.Links)
+
+            // 4. Recréation des stockages (StorageNodeModel)
+            for (int s = 0; s < totalStorages; s++)
+            {
+                var savedStorage = saveData.Storages[s];
+
+                var storageNode = new StorageNodeModel(
+                    savedStorage.ProductId,
+                    new Blazor.Diagrams.Core.Geometry.Point(savedStorage.X, savedStorage.Y)
+                );
+
+                Diagram.Nodes.Add(storageNode);
+                allNodesMap[savedStorage.NodeId] = storageNode;
+
+                currentStep++;
+                if (s % 5 == 0 || s == totalStorages - 1)
+                {
+                    _loadingProgress = (int)((double)currentStep / totalOperations * 100);
+                    _loadingStatusText = $"Création des stockages ({s + 1}/{totalStorages})...";
+                    StateHasChanged();
+                    await Task.Yield();
+                }
+            }
+
+
+            // 5. Reconnexion de tous les câbles et tuyaux
             for (int j = 0; j < totalLinks; j++)
             {
                 var savedLink = saveData.Links[j];
 
-                if (nodeMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
-                    nodeMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
+                // Recherche des nœuds source et cible dans le dictionnaire global
+                if (allNodesMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
+                    allNodesMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
                 {
-                    // Recherche du port correspondant sur le nœud source
+                    // Recherche du port source correspondant par Direction et ProductId
                     var srcPort = srcNode.Ports.OfType<ResourcePortModel>()
                         .FirstOrDefault(p => p.Direction == savedLink.SourceDirection &&
                                              string.Equals(p.ProductId, savedLink.SourceProductId, StringComparison.OrdinalIgnoreCase));
 
-                    // Recherche du port correspondant sur le nœud cible
+                    // Recherche du port cible correspondant par Direction et ProductId
                     var tgtPort = tgtNode.Ports.OfType<ResourcePortModel>()
                         .FirstOrDefault(p => p.Direction == savedLink.TargetDirection &&
                                              string.Equals(p.ProductId, savedLink.TargetProductId, StringComparison.OrdinalIgnoreCase));
@@ -1214,7 +1279,12 @@
 
             }
 
-            // 4. Recalcul des flux
+            // 6. Recalcul des flux
+            _loadingStatusText = "Flow calculation and balancing...";
+            _loadingProgress = 100;
+            StateHasChanged();
+            await Task.Yield();
+
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
             StateHasChanged();
 
@@ -1231,6 +1301,20 @@
             StateHasChanged();
         }
 
+    }
+
+
+    /// <summary>
+    /// Ajoute un nœud de stockage pour la ressource spécifiée sur le canvas.
+    /// </summary>
+    private void AddStorageNode(string productId)
+    {
+        // Positionne le stockage légèrement décalé au centre
+        var position = new Blazor.Diagrams.Core.Geometry.Point(300, 200);
+        var storageNode = new StorageNodeModel(productId, position);
+
+        Diagram.Nodes.Add(storageNode);
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
     }
 
 

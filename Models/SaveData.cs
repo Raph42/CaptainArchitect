@@ -13,6 +13,9 @@ public class DiagramSaveData
 
     // Liste des câbles/tuyaux reliant les ports
     public List<SavedLinkData> Links { get; set; } = new();
+
+    // Liste des stockages sauvegardés
+    public List<SavedStorageData> Storages { get; set; } = new();
 }
 
 /// <summary>
@@ -58,5 +61,23 @@ public class SavedLinkData
     public string TargetNodeId { get; set; } = string.Empty;
     public string TargetProductId { get; set; } = string.Empty;
     public PortDirection TargetDirection { get; set; }
+
+}
+
+
+/// <summary>
+/// Représentation sérialisée d'un nœud de stockage.
+/// </summary>
+public class SavedStorageData
+{
+    // Identifiant unique du nœud de stockage
+    public string NodeId { get; set; } = string.Empty;
+
+    // Identifiant de la ressource stockée (ex: "IronOre", "Water")
+    public string ProductId { get; set; } = string.Empty;
+
+    // Coordonnées sur le canvas
+    public double X { get; set; }
+    public double Y { get; set; }
 
 }

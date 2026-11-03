@@ -12,6 +12,7 @@ public static class FlowEngine
     public static void RecalculateFlows(BlazorDiagram diagram, ResourceService resourceService)
     {
         var machineNodes = diagram.Nodes.OfType<MachineNodeModel>().ToList();
+        var storageNodes = diagram.Nodes.OfType<StorageNodeModel>().ToList();
 
         // 1. Réinitialiser les débits entrants et sortants distribués
         foreach (var node in machineNodes)
@@ -34,8 +35,17 @@ public static class FlowEngine
         }
 
 
+        // Réinitialiser les débits calculés pour les stockages
+        foreach (var storage in storageNodes)
+        {
+            storage.TotalInputRate = 0m;
+            storage.DistributedOutputRate = 0m;
+            storage.DownstreamDemandRate = 0m;
+        }
+
+
         // 2. Première passe : calcul des demandes et distribution de la production nominale
-        DistributeFlows(diagram, machineNodes, useActualProduction: false);
+        DistributeAllFlows(diagram, machineNodes, storageNodes, useActualProduction: false);
 
         // 3. Calcul du taux d'activité (Efficiency) selon les entrées connectées
         foreach (var node in machineNodes)
@@ -58,6 +68,7 @@ public static class FlowEngine
             }
 
             decimal minRatio = 1.0m;
+
             foreach (var port in connectedInputPorts)
             {
                 var inputItem = node.Recipe.Inputs.FirstOrDefault(i => i.ProductId == port.ProductId);
@@ -83,8 +94,17 @@ public static class FlowEngine
             }
         }
 
-        DistributeFlows(diagram, machineNodes, useActualProduction: true);
+        foreach (var storage in storageNodes)
+        {
+            storage.TotalInputRate = 0m;
+            storage.DistributedOutputRate = 0m;
+            storage.DownstreamDemandRate = 0m;
+        }
 
+        DistributeAllFlows(diagram, machineNodes, storageNodes, useActualProduction: true);
+
+
+        // 5. Rafraîchissement des nœuds graphiques
         foreach (var node in machineNodes)
         {
             // OPTIMISATION : Ne rafraîchir que les nœuds qui possèdent au moins un lien,
@@ -97,6 +117,10 @@ public static class FlowEngine
             //}
         }
 
+        foreach (var storage in storageNodes)
+        {
+            storage.Refresh();
+        }
 
 
         // =========================================================================
@@ -127,84 +151,141 @@ public static class FlowEngine
 
 
 
-    private static void DistributeFlows(BlazorDiagram diagram, List<MachineNodeModel> machineNodes, bool useActualProduction)
+    /// <summary>
+    /// Distribue les flux depuis les machines productrices ET depuis les stockages.
+    /// Exécute 2 passes pour assurer la transmission à travers les stockages intermédiaires.
+    /// </summary>
+    private static void DistributeAllFlows(BlazorDiagram diagram, List<MachineNodeModel> machineNodes, List<StorageNodeModel> storageNodes, bool useActualProduction)
     {
-        foreach (var sourceNode in machineNodes)
+        // 2 itérations suffisent pour résoudre la chaîne Machine -> Stockage -> Machine
+        for (int iter = 0; iter < 2; iter++)
         {
-            foreach (var outputPort in sourceNode.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Output))
+            // 1. Réinitialiser les entrées accumulées sur les stockages avant chaque itération
+            // pour éviter d'additionner deux fois le flux
+            foreach (var storage in storageNodes)
             {
-                var outputItem = sourceNode.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
-                if (outputItem == null) continue;
+                storage.TotalInputRate = 0m;
+            }
 
-                // Si la machine source est en pause, sa production est nulle
-                decimal availableRate = 0m;
 
-                if (!sourceNode.IsPaused)
+            // 2. Réinitialiser également les entrées des machines avant chaque passage
+            // pour éviter d'additionner 2 fois le flux distribué (évite le 7.5 + 7.5 = 15)
+            foreach (var node in machineNodes)
+            {
+                foreach (var port in node.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Input))
                 {
-                    availableRate = useActualProduction
-                        ? sourceNode.GetActualProducedRatePerMin(outputItem)
-                        : sourceNode.GetOutputRatePerMin(outputItem);
+                    node.ActualInputRates[port.Id] = 0m;
                 }
+            }
 
-                // Recherche des ports cibles connectés via diagram.Links
-                var connectedTargetPorts = diagram.Links
-                    .Where(l => (l.Source as SinglePortAnchor)?.Port == outputPort && (l.Target as SinglePortAnchor)?.Port != null)
-                    .Select(l => ((SinglePortAnchor)l.Target).Port as ResourcePortModel)
-                    .Where(p => p != null && p.Direction == PortDirection.Input)
-                    .Cast<ResourcePortModel>()
-                    .ToList();
 
-                if (connectedTargetPorts.Count == 0) continue;
-
-                // Total de la demande en aval
-                decimal totalDemand = 0m;
-                var targetDemands = new Dictionary<ResourcePortModel, decimal>();
-
-                foreach (var targetPort in connectedTargetPorts)
+            // Distribution depuis les machines
+            foreach (var sourceNode in machineNodes)
+            {
+                foreach (var outputPort in sourceNode.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Output))
                 {
-                    if (targetPort.Parent is MachineNodeModel targetNode)
+                    var outputItem = sourceNode.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
+                    if (outputItem == null) continue;
+
+                    decimal availableRate = 0m;
+                    if (!sourceNode.IsPaused)
                     {
-                        var reqItem = targetNode.Recipe.Inputs.FirstOrDefault(inp => inp.ProductId == targetPort.ProductId);
-
-                        //decimal demand = reqItem != null ? targetNode.GetInputRatePerMin(reqItem) : 0m;
-
-                        // Si la machine cible est en pause, elle ne consomme rien : la demande est de 0m
-                        decimal demand = (reqItem != null && !targetNode.IsPaused)
-                            ? targetNode.GetInputRatePerMin(reqItem)
-                            : 0m;
-
-                        targetDemands[targetPort] = demand;
-                        totalDemand += demand;
-                    }
-                }
-
-                sourceNode.DownstreamDemandRates[outputPort.Id] = totalDemand;
-
-                // Répartition proportionnelle
-                decimal deliveredTotal = 0m;
-                foreach (var targetPort in connectedTargetPorts)
-                {
-                    decimal demand = targetDemands[targetPort];
-                    decimal allocated = 0m;
-
-                    if (totalDemand > 0)
-                    {
-                        allocated = Math.Min(demand, availableRate * (demand / totalDemand));
+                        availableRate = useActualProduction
+                            ? sourceNode.GetActualProducedRatePerMin(outputItem)
+                            : sourceNode.GetOutputRatePerMin(outputItem);
                     }
 
-                    deliveredTotal += allocated;
-
-                    if (targetPort.Parent is MachineNodeModel targetNode)
-                    {
-                        targetNode.ActualInputRates[targetPort.Id] = targetNode.GetActualInputRate(targetPort.Id) + allocated;
-                    }
+                    DistributeFromPort(diagram, outputPort, availableRate, out decimal totalDemand, out decimal deliveredTotal);
+                    sourceNode.DownstreamDemandRates[outputPort.Id] = totalDemand;
+                    sourceNode.DistributedOutputRates[outputPort.Id] = deliveredTotal;
                 }
+            }
 
-                sourceNode.DistributedOutputRates[outputPort.Id] = deliveredTotal;
+            // Distribution depuis les stockages
+            foreach (var storage in storageNodes)
+            {
+                // Un stockage distribue ce qu'il a reçu en entrée
+                decimal availableInStorage = storage.TotalInputRate;
+
+                DistributeFromPort(diagram, storage.OutputPort, availableInStorage, out decimal downstreamDemand, out decimal deliveredTotal);
+                storage.DownstreamDemandRate = downstreamDemand;
+                storage.DistributedOutputRate = deliveredTotal;
             }
         }
     }
 
+
+
+    /// <summary>
+    /// Trouve toutes les cibles connectées à un port de sortie et leur distribue le débit au prorata.
+    /// </summary>
+    private static void DistributeFromPort(BlazorDiagram diagram, ResourcePortModel outputPort, decimal availableRate, out decimal totalDemand, out decimal deliveredTotal)
+    {
+        totalDemand = 0m;
+        deliveredTotal = 0m;
+
+        // Trouver les ports d'entrée cibles via les liens du diagramme
+        var connectedTargetPorts = new List<ResourcePortModel>();
+        foreach (var link in diagram.Links)
+        {
+            ResourcePortModel? src = (link.Source as SinglePortAnchor)?.Port as ResourcePortModel;
+            ResourcePortModel? tgt = (link.Target as SinglePortAnchor)?.Port as ResourcePortModel;
+
+            if (src == outputPort && tgt is { Direction: PortDirection.Input })
+                connectedTargetPorts.Add(tgt);
+            else if (tgt == outputPort && src is { Direction: PortDirection.Input })
+                connectedTargetPorts.Add(src);
+        }
+
+        if (connectedTargetPorts.Count == 0) return;
+
+        var targetDemands = new Dictionary<ResourcePortModel, decimal>();
+
+        // Calcul de la demande de chaque port cible
+        foreach (var targetPort in connectedTargetPorts)
+        {
+            decimal demand = 0m;
+
+            if (targetPort.Parent is MachineNodeModel targetMachine)
+            {
+                var reqItem = targetMachine.Recipe.Inputs.FirstOrDefault(i => i.ProductId == targetPort.ProductId);
+                demand = (reqItem != null && !targetMachine.IsPaused) ? targetMachine.GetInputRatePerMin(reqItem) : 0m;
+            }
+            else if (targetPort.Parent is StorageNodeModel targetStorage)
+            {
+                // Si la cible est un stockage, sa demande correspond à ce que ses consommateurs aval lui réclament
+                demand = targetStorage.DownstreamDemandRate > 0 ? targetStorage.DownstreamDemandRate : 9999m;
+            }
+
+            targetDemands[targetPort] = demand;
+            totalDemand += demand;
+        }
+
+        // Répartition de la production disponible
+        foreach (var targetPort in connectedTargetPorts)
+        {
+            decimal demand = targetDemands[targetPort];
+            decimal allocated = 0m;
+
+            if (totalDemand > 0)
+            {
+                allocated = availableRate >= totalDemand
+                    ? demand
+                    : availableRate * (demand / totalDemand);
+            }
+
+            deliveredTotal += allocated;
+
+            if (targetPort.Parent is MachineNodeModel targetMachine)
+            {
+                targetMachine.ActualInputRates[targetPort.Id] = targetMachine.GetActualInputRate(targetPort.Id) + allocated;
+            }
+            else if (targetPort.Parent is StorageNodeModel targetStorage)
+            {
+                targetStorage.TotalInputRate += allocated;
+            }
+        }
+    }
 
 
 }

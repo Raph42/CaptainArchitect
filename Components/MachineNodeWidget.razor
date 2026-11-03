@@ -29,7 +29,6 @@ Dans Pages/Home.razor
     }
 
     <!-- En-tête : Nom de la machine + Boutons Upgrade/Downgrade à gauche, Contrôles Multiplier + Bouton Pause + Croix à droite -->
-
     <div class="machine-header">
         <div class="d-flex align-center gap-1">
 
@@ -343,8 +342,6 @@ Dans Pages/Home.razor
         </div>
     </div>
 
-
-
     <!-- Pied de carte : Consommation électrique et Total ouvriers -->
     <div class="machine-footer">
         <!-- Section Ouvriers -->
@@ -363,9 +360,7 @@ Dans Pages/Home.razor
         </div>
     </div>
 
-
 </div>
-
 
 
 
@@ -537,11 +532,15 @@ Dans Pages/Home.razor
     }
 
     .port-column.inputs {
+        justify-content: flex-start;
         padding-left: 0;
+        margin-left: -6px;
     }
 
     .port-column.outputs {
+        justify-content: flex-end;
         padding-right: 0;
+        margin-right: -6px;
     }
 
     /* 4. Les lignes de ports */
@@ -898,6 +897,7 @@ Dans Pages/Home.razor
     }
 
 </style>
+
 
 @code {
     [CascadingParameter] public BlazorDiagram Diagram { get; set; } = default!;
