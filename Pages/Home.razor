@@ -658,6 +658,35 @@
     private int _loadingProgress = 0;
     private string _loadingStatusText = "";
 
+    // =========================================================================
+    // GESTION DU DÉCALAGE EN CASCADE POUR LES NOUVEAUX ÉLÉMENTS ET CLONES
+    // =========================================================================
+    // Décalage courant appliqué à chaque ajout successif
+    private double _cascadeOffset = 0.0;
+
+    // Pas d'incrément à chaque ajout (en pixels)
+    private const double CascadeStep = 30.0;
+
+    // Décalage maximal avant de repartir du centre
+    private const double MaxCascadeOffset = 180.0;
+
+
+    /// <summary>
+    /// Calcule le décalage suivant et fait repartir le cycle s'il dépasse le maximum.
+    /// </summary>
+    private double GetNextCascadeOffset()
+    {
+        double current = _cascadeOffset;
+        _cascadeOffset += CascadeStep;
+
+        if (_cascadeOffset > MaxCascadeOffset)
+        {
+            _cascadeOffset = 0.0;
+        }
+        return current;
+    }
+
+
     // Texte saisi dans le filtre du menu "Add Storage"
     private string _storageFilterText = "";
 
@@ -1006,9 +1035,10 @@
         double centerX = ((canvasWidth / 2.0) - Diagram.Pan.X) / zoom;
         double centerY = ((canvasHeight / 2.0) - Diagram.Pan.Y) / zoom;
 
-        // 3. Décalage pour que ce soit le CENTRE de la machine qui soit au milieu (et pas son coin supérieur gauche)
-        double targetX = centerX - (nodeWidth / 2.0);
-        double targetY = centerY - (nodeHeight / 2.0);
+        // 3. Décalage pour centrer la machine + décalage en cascade si ajouts successifs
+        double offset = GetNextCascadeOffset();
+        double targetX = centerX - (nodeWidth / 2.0) + offset;
+        double targetY = centerY - (nodeHeight / 2.0) + offset;
 
         // 4. Instanciation du nœud à la position calculée
         var machineNode = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
@@ -1419,8 +1449,10 @@
         double centerX = ((canvasWidth / 2.0) - Diagram.Pan.X) / zoom;
         double centerY = ((canvasHeight / 2.0) - Diagram.Pan.Y) / zoom;
 
-        double targetX = centerX - (nodeWidth / 2.0);
-        double targetY = centerY - (nodeHeight / 2.0);
+        // 3. Décalage pour centrer le stockage + décalage en cascade
+        double offset = GetNextCascadeOffset();
+        double targetX = centerX - (nodeWidth / 2.0) + offset;
+        double targetY = centerY - (nodeHeight / 2.0) + offset;
 
         // 3. Création du nœud
         var storageNode = new StorageNodeModel(productId, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
@@ -1466,10 +1498,12 @@
     {
         if (originalNode == null) return;
 
-        // Décalage de 40px vers le bas et la droite pour ne pas recouvrir l'original
+        // Décalage fixe de 35px en diagonale par rapport au nœud actuellement sélectionné
+        const double cloneOffset = 35.0;
+
         var newPosition = new Blazor.Diagrams.Core.Geometry.Point(
-            originalNode.Position.X + 40,
-            originalNode.Position.Y + 40
+            originalNode.Position.X + cloneOffset,
+            originalNode.Position.Y + cloneOffset
         );
 
         NodeModel? newNode = null;
