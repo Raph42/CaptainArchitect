@@ -25,6 +25,15 @@
 
 </head>
 
+
+<script>
+        // Bloque l'affichage du menu contextuel du navigateur lors d'un clic droit
+        document.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+        });
+</script>
+
+
 <body>
     <div id="app">
         <svg class="loading-progress">

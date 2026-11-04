@@ -1188,20 +1188,36 @@ Dans Pages/Home.razor
     private string _lastMachineId = "";
     private bool _lastSelected;
 
+    // Mémorise la somme des débits réels actuels pour détecter la suppression ou l'ajout d'un lien
+    private decimal _lastTotalInputRates = -1;
+    private decimal _lastTotalOutputRates = -1;
+    private int _lastConnectedLinksCount = -1;
+
     protected override bool ShouldRender()
     {
-        // Ne redessine la carte QUE si ses données internes ou sa sélection ont changé
+        // Calcule la somme des flux réels actuels
+        decimal currentInputs = Node.ActualInputRates.Values.Sum();
+        decimal currentOutputs = Node.DistributedOutputRates.Values.Sum();
+        int currentLinksCount = Node.Ports.Sum(p => p.Links.Count);
+
+        // Si l'un des débits, l'efficacité, les liaisons ou la sélection a changé : on réaffiche
         if (Node.Multiplier != _lastMultiplier ||
             Node.IsPaused != _lastIsPaused ||
             Node.OperationalEfficiency != _lastEfficiency ||
             Node.CurrentMachineId != _lastMachineId ||
-            Node.Selected != _lastSelected)
+            Node.Selected != _lastSelected ||
+            currentInputs != _lastTotalInputRates ||
+            currentOutputs != _lastTotalOutputRates ||
+            currentLinksCount != _lastConnectedLinksCount)
         {
             _lastMultiplier = Node.Multiplier;
             _lastIsPaused = Node.IsPaused;
             _lastEfficiency = Node.OperationalEfficiency;
             _lastMachineId = Node.CurrentMachineId;
             _lastSelected = Node.Selected;
+            _lastTotalInputRates = currentInputs;
+            _lastTotalOutputRates = currentOutputs;
+            _lastConnectedLinksCount = currentLinksCount;
             return true;
         }
 

@@ -316,7 +316,8 @@
     <div class="flex-grow-1 h-100 position-relative outline-none"
          style="background-color: #1a1a1a;"
          tabindex="0" 
-         @onkeydown="HandleKeyDown">
+         @onkeydown="HandleKeyDown"
+         @oncontextmenu:preventDefault="true">
         @if (Diagram != null)
         {
             <CascadingValue Value="Diagram">
@@ -972,15 +973,27 @@
         // =========================================================================
         Diagram.Links.Added += link =>
         {
-            // Recalcul UNIQUEMENT quand le lien s'accroche définitivement sur le port cible
-            link.TargetAttached += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
+            // Recalcul quand le lien s'accroche définitivement sur le port cible
+            link.TargetAttached += _ =>
+            {
+                FlowEngine.RecalculateFlows(Diagram, ResourceService);
+                InvokeAsync(StateHasChanged);
+            };
         };
 
-        // Recalcul lorsqu'une liaison est supprimée
-        Diagram.Links.Removed += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        // Recalcul lorsqu'une liaison est supprimée (au clic droit ou touche Suppr)
+        Diagram.Links.Removed += _ => 
+        {
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
+            InvokeAsync(StateHasChanged);
+        };
 
         // Recalcul lorsqu'une machine ou un stockage est supprimé
-        Diagram.Nodes.Removed += _ => FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        Diagram.Nodes.Removed += _ => 
+        {
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
+            InvokeAsync(StateHasChanged);
+        };
 
         // Enregistre le composant personnalisé pour les nœuds de machine
         Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
