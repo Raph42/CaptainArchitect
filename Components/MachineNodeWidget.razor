@@ -85,7 +85,14 @@ Dans Pages/Home.razor
             </button>
 
 
-            <!-- 2. Croix rouge immédiatement à sa droite Bouton supprimer -->
+            <!-- 4. Bouton Dupliquer la machine -->
+            <button class="btn-duplicate" 
+                    title="Dupliquer la machine (Ctrl+D)" 
+                    @onclick="DuplicateThisNode"
+                    @onclick:stopPropagation="true">⧉</button>
+
+
+            <!-- 3. Croix rouge immédiatement à sa droite Bouton supprimer -->
             <button class="btn-delete" title="Delete the machine" @onclick="DeleteNode">✕</button>
         </div>
     </div>
@@ -739,6 +746,29 @@ Dans Pages/Home.razor
         user-select: none;
     }
 
+    /* Bouton Dupliquer dans l'en-tête */
+    .btn-duplicate {
+        background: transparent;
+        border: none;
+        color: #38bdf8;
+        font-size: 0.95rem;
+        cursor: pointer;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        line-height: 1;
+        padding: 0;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-duplicate:hover {
+        background: rgba(56, 189, 248, 0.2);
+        color: #7dd3fc;
+    }
+
     /* Boutons flèches ultra-compacts */
     .btn-port-swap {
         background: transparent;
@@ -984,10 +1014,10 @@ Dans Pages/Home.razor
         {
             Node.SwapInputs(index, index - 1);
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            
+
             // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
             await Task.Yield();
-            
+
             // Notifie le diagramme pour recalculer et redessiner les courbes des liens
             Diagram.Refresh();
         }
@@ -1001,10 +1031,10 @@ Dans Pages/Home.razor
         {
             Node.SwapInputs(index, index + 1);
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            
+
             // Laisse un court instant au navigateur pour placer les éléments HTML à leur nouvel endroit
             await Task.Yield();
-            
+
             // Notifie le diagramme pour recalculer et redessiner les courbes des liens
             Diagram.Refresh();
         }
@@ -1018,10 +1048,10 @@ Dans Pages/Home.razor
         {
             Node.SwapOutputs(index, index - 1);
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            
+
             // Laisse un cycle de rendu au navigateur pour repositionner les éléments HTML
             await Task.Yield();
-            
+
             // Notifie le diagramme pour recalculer et redessiner les courbes des liens
             Diagram.Refresh();
         }
@@ -1035,10 +1065,10 @@ Dans Pages/Home.razor
         {
             Node.SwapOutputs(index, index + 1);
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            
+
             // Laisse un cycle de rendu au navigateur pour repositionner les éléments HTML
             await Task.Yield();
-            
+
             // Notifie le diagramme pour recalculer et redessiner les courbes des liens
             Diagram.Refresh();
         }
@@ -1103,6 +1133,48 @@ Dans Pages/Home.razor
             return $"{(powerKw / 1000m):0.##} MW";
         }
         return $"{powerKw:0.##} kW";
+    }
+
+
+
+    // Duplication de cette machine
+    private async Task DuplicateThisNode()
+    {
+        // Calcule le décalage de +40px, +40px
+        var newPosition = new Blazor.Diagrams.Core.Geometry.Point(Node.Position.X + 40, Node.Position.Y + 40);
+
+        var clone = new MachineNodeModel(Node.Recipe, newPosition)
+        {
+            Multiplier = Node.Multiplier,
+            IsPaused = Node.IsPaused
+        };
+
+        // Recopie le tier exact
+        if (!string.IsNullOrWhiteSpace(Node.CurrentMachineId))
+        {
+            while (clone.CurrentMachineId != Node.CurrentMachineId && clone.Upgrade()) { }
+        }
+
+        // Recopie l'ordre des ports personnalisés
+        var inputs = Node.Recipe.Inputs.Select(i => i.ProductId).ToList();
+        var outputs = Node.Recipe.Outputs.Select(o => o.ProductId).ToList();
+        clone.ApplyCustomPortOrder(inputs, outputs);
+
+        // Désélectionne tout avant l'ajout
+        Diagram.UnselectAll();
+
+        // Ajout au diagramme
+        Diagram.Nodes.Add(clone);
+
+        // Attente du rendu DOM
+        await Task.Yield();
+
+        // Sélectionne la nouvelle machine
+        Diagram.SelectModel(clone, unselectOthers: true);
+
+        clone.Refresh();
+        Diagram.Refresh();
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
     }
 
 

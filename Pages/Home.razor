@@ -1005,10 +1005,12 @@
 
     private void HandleKeyDown(KeyboardEventArgs e)
     {
+        // 1. Suppression des nœuds ou liens sélectionnés (Delete ou Backspace)
         if (e.Key is "Delete" or "Backspace")
         {
             // 1. Récupère tous les liens sélectionnés et les supprime du diagramme
             var selectedLinks = Diagram.Links.Where(l => l.Selected).ToList();
+
             foreach (var link in selectedLinks)
             {
                 Diagram.Links.Remove(link);
@@ -1016,11 +1018,27 @@
 
             // 2. Supprime également les nœuds sélectionnés s'il y en a
             var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
+
             foreach (var node in selectedNodes)
             {
                 Diagram.Nodes.Remove(node);
             }
+
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
+
+        // 2. Duplication par raccourci Ctrl + D ou Ctrl + d
+        else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
+        {
+            // Récupère le dernier nœud sélectionné sur le diagramme
+            var selectedNode = Diagram.Nodes.FirstOrDefault(n => n.Selected);
+
+            if (selectedNode != null)
+            {
+                _ = DuplicateNode(selectedNode);
+            }
+        }
+
     }
 
 
@@ -1383,6 +1401,78 @@
         storageNode.Refresh();
         Diagram.Refresh();
         FlowEngine.RecalculateFlows(Diagram, ResourceService);
+    }
+
+
+
+    /// <summary>
+    /// Duplique une machine ou un stockage sélectionné en conservant ses réglages,
+    /// en décalant sa position et en recalculant les flux.
+    /// </summary>
+    /// <param name="originalNode">Le nœud source à dupliquer</param>
+    public async Task DuplicateNode(NodeModel originalNode)
+    {
+        if (originalNode == null) return;
+
+        // Décalage de 40px vers le bas et la droite pour ne pas recouvrir l'original
+        var newPosition = new Blazor.Diagrams.Core.Geometry.Point(
+            originalNode.Position.X + 40,
+            originalNode.Position.Y + 40
+        );
+
+        NodeModel? newNode = null;
+
+        // Cas 1 : Duplication d'une machine (MachineNodeModel)
+        if (originalNode is MachineNodeModel machineSrc)
+        {
+            var machineClone = new MachineNodeModel(machineSrc.Recipe, newPosition)
+            {
+                Multiplier = machineSrc.Multiplier,
+                IsPaused = machineSrc.IsPaused
+            };
+
+            // Restaure le bon niveau (Tier) de la machine
+            if (!string.IsNullOrWhiteSpace(machineSrc.CurrentMachineId))
+            {
+                while (machineClone.CurrentMachineId != machineSrc.CurrentMachineId && machineClone.Upgrade()) { }
+            }
+
+            // Restaure l'ordre exact personnalisé des ports d'entrée et de sortie
+            var orderedInputs = machineSrc.Recipe.Inputs.Select(i => i.ProductId).ToList();
+            var orderedOutputs = machineSrc.Recipe.Outputs.Select(o => o.ProductId).ToList();
+            machineClone.ApplyCustomPortOrder(orderedInputs, orderedOutputs);
+
+            newNode = machineClone;
+        }
+        // Cas 2 : Duplication d'un stockage (StorageNodeModel)
+        else if (originalNode is StorageNodeModel storageSrc)
+        {
+            var storageClone = new StorageNodeModel(storageSrc.ProductId, newPosition);
+            newNode = storageClone;
+        }
+
+        if (newNode != null)
+        {
+            // Désélectionne tous les éléments actuellement actifs (y compris le nœud d'origine)
+            Diagram.UnselectAll();
+
+            // Ajoute le nœud au diagramme
+            Diagram.Nodes.Add(newNode);
+
+            // Force le cycle de rendu pour que Blazor peigne le DOM et monte les ports
+            StateHasChanged();
+            await Task.Yield();
+
+            // Applique la sélection sur le nouveau nœud maintenant qu'il est présent dans le DOM
+            Diagram.SelectModel(newNode, unselectOthers: true);
+
+            // Rafraîchit géométriquement le nœud et le canvas
+            newNode.Refresh();
+            Diagram.Refresh();
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
+
+            Snackbar.Add("Duplicate item !", Severity.Info);
+        }
     }
 
 

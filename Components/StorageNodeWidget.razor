@@ -8,15 +8,30 @@
 
 <div class="storage-card @(Node.Selected ? "selected" : "")">
 
-    <!-- En-tête : Titre et bouton de suppression -->
+    <!-- En-tête : Titre et boutons d'actions -->
     <div class="storage-header">
+
         <div class="d-flex align-center gap-1">
             <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="MudBlazor.Size.Small" Style="color: #38bdf8; font-size: 0.9rem;" />
             <span class="storage-title" title="@ProductDisplayName">
                 @ProductDisplayName
             </span>
         </div>
-        <button class="btn-delete" title="Delete storage" @onclick="DeleteNode">✕</button>
+
+        <div class="d-flex align-center gap-1">
+
+            <!-- Bouton Dupliquer le stockage -->
+            <button class="btn-duplicate"
+                    title="Dupliquer le stockage (Ctrl+D)"
+                    @onclick="DuplicateThisNode"
+                    @onclick:stopPropagation="true">
+                ⧉
+            </button>
+
+            <!-- Croix rouge immédiatement à sa droite Bouton supprimer -->
+            <button class="btn-delete" title="Supprimer le stockage" @onclick="DeleteNode">✕</button>
+        </div>
+
     </div>
 
     <!-- Corps du stockage : Ports collés aux bords -->
@@ -123,6 +138,23 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         max-width: 190px;
+    }
+
+    .btn-duplicate {
+        background: transparent;
+        border: none;
+        color: #38bdf8;
+        font-size: 0.95rem;
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+        border-radius: 4px;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-duplicate:hover {
+        background: rgba(56, 189, 248, 0.2);
+        color: #7dd3fc;
     }
 
     .btn-delete {
@@ -302,4 +334,29 @@
             Node.Changed -= OnNodeChanged;
         }
     }
+
+    // Duplication de ce stockage
+    private async Task DuplicateThisNode()
+    {
+        // 1. Décalage de 40px
+        var newPosition = new Blazor.Diagrams.Core.Geometry.Point(Node.Position.X + 40, Node.Position.Y + 40);
+        var clone = new StorageNodeModel(Node.ProductId, newPosition);
+
+        // 2. Désélectionne tout avant l'ajout
+        Diagram.UnselectAll();
+
+        // 3. Ajout au diagramme
+        Diagram.Nodes.Add(clone);
+
+        // 4. Attente du rendu DOM
+        await Task.Yield();
+
+        // 5. Sélectionne le nouveau stockage
+        Diagram.SelectModel(clone, unselectOthers: true);
+
+        clone.Refresh();
+        Diagram.Refresh();
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+    }
+
 }
