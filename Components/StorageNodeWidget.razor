@@ -4,8 +4,10 @@
 @using CaptainArchitect.Models
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
+@implements IDisposable
 
 <div class="storage-card @(Node.Selected ? "selected" : "")">
+
     <!-- En-tête : Titre et bouton de suppression -->
     <div class="storage-header">
         <div class="d-flex align-center gap-1">
@@ -20,9 +22,9 @@
     <!-- Corps du stockage : Ports collés aux bords -->
     <div class="storage-body">
 
-        <!-- Port d'entrée (Gauche) -->
+        <!-- Port d'entrée (Gauche) avec son identifiant pour forcer la mise à jour -->
         <div class="storage-port-wrapper input-wrapper">
-            <PortRenderer Port="Node.InputPort" Class="diagram-port" />
+            <PortRenderer @key="Node.InputPort.Id" Port="Node.InputPort" Class="diagram-port" />
             <div class="rate-stack text-left">
                 <span class="rate-label">IN</span>
                 <span class="rate-value in-rate">@Node.TotalInputRate.ToString("0.#")/m</span>
@@ -71,18 +73,17 @@
             </div>
         </div>
 
-        <!-- Port de sortie (Droite) -->
+        <!-- Port de sortie (Droite) avec son identifiant -->
         <div class="storage-port-wrapper output-wrapper">
             <div class="rate-stack text-right">
                 <span class="rate-label">OUT</span>
                 <span class="rate-value out-rate">@Node.DistributedOutputRate.ToString("0.#")/m</span>
             </div>
-            <PortRenderer Port="Node.OutputPort" Class="diagram-port" />
+            <PortRenderer @key="Node.OutputPort.Id" Port="Node.OutputPort" Class="diagram-port" />
         </div>
 
     </div>
 </div>
-
 
 <style>
     .storage-card {
@@ -99,9 +100,9 @@
         user-select: none;
     }
 
-    .storage-card.selected {
-        border-color: #38bdf8;
-    }
+        .storage-card.selected {
+            border-color: #38bdf8;
+        }
 
     .storage-header {
         display: flex;
@@ -134,9 +135,9 @@
         line-height: 1;
     }
 
-    .btn-delete:hover {
-        color: #f87171;
-    }
+        .btn-delete:hover {
+            color: #f87171;
+        }
 
     .storage-body {
         position: relative;
@@ -167,6 +168,21 @@
         justify-content: flex-end;
         padding-right: 0;
         margin-right: -6px; /* Place le centre du port exactement sur la bordure droite */
+    }
+
+    /* STYLES EXPLICITES DES PORTS DU STOCKAGE (évite la dépendance à MachineNodeWidget) */
+    .diagram-port {
+        width: 12px !important;
+        height: 12px !important;
+        min-width: 12px !important;
+        min-height: 12px !important;
+        flex-shrink: 0 !important;
+        background: #3b82f6 !important;
+        border: 2px solid #ffffff !important;
+        border-radius: 50% !important;
+        cursor: crosshair !important;
+        box-sizing: border-box !important;
+        display: inline-block !important;
     }
 
     .rate-stack {
@@ -239,15 +255,39 @@
     }
 </style>
 
-
-
 @code {
-
     [CascadingParameter] public BlazorDiagram Diagram { get; set; } = default!;
     [Parameter] public StorageNodeModel Node { get; set; } = default!;
 
     private Product? ProductEntity => ResourceService.GetProduct(Node.ProductId);
     private string ProductDisplayName => ProductEntity?.Name ?? Node.ProductId;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        // Abonnement au changement du modèle
+        if (Node != null)
+        {
+            Node.Changed += OnNodeChanged;
+        }
+    }
+
+    // Force la prise en compte des coordonnées géométriques des ports dès que le DOM est peint
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && Node != null)
+        {
+            // Notifie les ports pour que Blazor.Diagrams enregistre leur position absolue
+            Node.InputPort?.Refresh();
+            Node.OutputPort?.Refresh();
+        }
+    }
+
+    // Accepte le modèle passé par l'événement Action<Model> de Blazor.Diagrams
+    private void OnNodeChanged(Blazor.Diagrams.Core.Models.Base.Model model)
+    {
+        InvokeAsync(StateHasChanged);
+    }
 
     private void DeleteNode()
     {
@@ -255,4 +295,11 @@
         FlowEngine.RecalculateFlows(Diagram, ResourceService);
     }
 
+    public void Dispose()
+    {
+        if (Node != null)
+        {
+            Node.Changed -= OnNodeChanged;
+        }
+    }
 }

@@ -97,23 +97,55 @@
             </div>
 
 
-            <!-- Exemple de bouton dans la barre d'outils -->
+
+            <!-- Menu pour ajouter un stockage avec filtre de recherche intégré -->
             <MudMenu Label="Add Storage"
                      StartIcon="@Icons.Material.Filled.Inventory2"
                      Variant="Variant.Filled"
                      Color="Color.Info"
                      Size="MudBlazor.Size.Small"
-                     Dense="true">
-                @foreach (var prod in ProductDict.Values.OrderBy(p => p.Name))
+                     Dense="true"
+                     MaxHeight="350">
+
+                <!-- 1. Champ de recherche épinglé en haut du menu -->
+                <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
+                    <MudTextField @bind-Value="_storageFilterText"
+                                  Placeholder="Filter products..."
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  IconSize="MudBlazor.Size.Small"
+                                  Immediate="true"
+                                  Clearable="true"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" />
+                </div>
+
+                <MudDivider Class="my-1" />
+
+                <!-- 2. Liste déroulante filtrée dynamiquement -->
+                @if (FilteredStorageProducts.Any())
                 {
-                    <MudMenuItem OnClick="@(() => AddStorageNode(prod.Id))">
-                        <div class="d-flex align-center gap-2">
-                            <ResourceBadge ProductId="@prod.Id" />
-                            <span>@prod.Name</span>
-                        </div>
-                    </MudMenuItem>
+                    @foreach (var prod in FilteredStorageProducts)
+                    {
+                        <MudMenuItem OnClick="@(() => AddStorageNode(prod.Id))">
+                            <div class="d-flex align-center gap-2">
+                                <ResourceBadge ProductId="@prod.Id" />
+                                <span>@prod.Name</span>
+                            </div>
+                        </MudMenuItem>
+                    }
+                }
+                else
+                {
+                    <!-- Message affiché si aucune ressource ne correspond -->
+                    <div class="pa-2 text-center" style="color: #71717a; font-size: 0.8rem;">
+                        No product found
+                    </div>
                 }
             </MudMenu>
+
+
+
 
 
             <!-- HISTORIQUE DES DERNIÈRES RECHERCHES -->
@@ -605,6 +637,18 @@
     private bool _isLoadingDiagram = false;
     private int _loadingProgress = 0;
     private string _loadingStatusText = "";
+
+    // Texte saisi dans le filtre du menu "Add Storage"
+    private string _storageFilterText = "";
+
+    // Liste filtrée des produits disponibles pour le stockage
+    private IEnumerable<Product> FilteredStorageProducts =>
+        string.IsNullOrWhiteSpace(_storageFilterText)
+            ? ProductDict.Values.OrderBy(p => p.Name)
+            : ProductDict.Values
+                .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(p => p.Name);
 
     // Propriété de filtrage des recettes
     private IEnumerable<Recipe>? FilteredRecipes =>
@@ -1304,16 +1348,40 @@
     }
 
 
-    /// <summary>
-    /// Ajoute un nœud de stockage pour la ressource spécifiée sur le canvas.
-    /// </summary>
-    private void AddStorageNode(string productId)
-    {
-        // Positionne le stockage légèrement décalé au centre
-        var position = new Blazor.Diagrams.Core.Geometry.Point(300, 200);
-        var storageNode = new StorageNodeModel(productId, position);
 
+    /// <summary>
+    /// Ajoute un nœud de stockage pour la ressource spécifiée sur le canvas,
+    /// le centre par rapport à la vue et force le rafraîchissement des ports.
+    /// </summary>
+    private async Task AddStorageNode(string productId)
+    {
+        // 1. Réinitialise le filtre de recherche du menu
+        _storageFilterText = "";
+
+        // 2. Calcule une position centrée dans la vue visible du canvas
+        const double nodeWidth = 260.0;
+        const double nodeHeight = 100.0;
+
+        double canvasWidth = Diagram.Container?.Width ?? 1200;
+        double canvasHeight = Diagram.Container?.Height ?? 800;
+        double zoom = Diagram.Zoom;
+        double centerX = ((canvasWidth / 2.0) - Diagram.Pan.X) / zoom;
+        double centerY = ((canvasHeight / 2.0) - Diagram.Pan.Y) / zoom;
+
+        double targetX = centerX - (nodeWidth / 2.0);
+        double targetY = centerY - (nodeHeight / 2.0);
+
+        // 3. Création et ajout du nœud
+        var storageNode = new StorageNodeModel(productId, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
         Diagram.Nodes.Add(storageNode);
+
+        // 4. Laisse le temps au DOM de rendre StorageNodeWidget et PortRenderer
+        StateHasChanged();
+        await Task.Yield();
+
+        // 5. Force la mesure géométrique des ports et redessine le canvas
+        storageNode.Refresh();
+        Diagram.Refresh();
         FlowEngine.RecalculateFlows(Diagram, ResourceService);
     }
 
