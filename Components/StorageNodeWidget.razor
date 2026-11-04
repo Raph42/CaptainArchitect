@@ -359,4 +359,30 @@
         FlowEngine.RecalculateFlows(Diagram, ResourceService);
     }
 
+
+
+    // =========================================================================
+    // OPTIMISATION PERFORMANCE : Bloque les rendus inutiles pendant le déplacement
+    // =========================================================================
+    private decimal _lastIn = -1;
+    private decimal _lastOut = -1;
+    private bool _lastSelected;
+
+    protected override bool ShouldRender()
+    {
+        if (Node.TotalInputRate != _lastIn ||
+            Node.DistributedOutputRate != _lastOut ||
+            Node.Selected != _lastSelected)
+        {
+            _lastIn = Node.TotalInputRate;
+            _lastOut = Node.DistributedOutputRate;
+            _lastSelected = Node.Selected;
+            return true;
+        }
+
+        return false;
+    }
+
+
+
 }

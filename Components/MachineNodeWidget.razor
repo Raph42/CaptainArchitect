@@ -1178,4 +1178,37 @@ Dans Pages/Home.razor
     }
 
 
+
+    // =========================================================================
+    // OPTIMISATION PERFORMANCE : Bloque les rendus inutiles pendant le déplacement
+    // =========================================================================
+    private decimal _lastMultiplier = -1;
+    private bool _lastIsPaused;
+    private decimal _lastEfficiency = -1;
+    private string _lastMachineId = "";
+    private bool _lastSelected;
+
+    protected override bool ShouldRender()
+    {
+        // Ne redessine la carte QUE si ses données internes ou sa sélection ont changé
+        if (Node.Multiplier != _lastMultiplier ||
+            Node.IsPaused != _lastIsPaused ||
+            Node.OperationalEfficiency != _lastEfficiency ||
+            Node.CurrentMachineId != _lastMachineId ||
+            Node.Selected != _lastSelected)
+        {
+            _lastMultiplier = Node.Multiplier;
+            _lastIsPaused = Node.IsPaused;
+            _lastEfficiency = Node.OperationalEfficiency;
+            _lastMachineId = Node.CurrentMachineId;
+            _lastSelected = Node.Selected;
+            return true;
+        }
+
+        // Pendant un simple déplacement de souris sur le canvas, on ignore le rendu du HTML
+        return false;
+    }
+
+
+
 }
