@@ -188,6 +188,11 @@ public class MachineNodeModel : NodeModel
     /// </summary>
     public bool CanMoveInputDown(int index) => index < Recipe.Inputs.Count - 1;
 
+    // =========================================================================
+    // VERSION DE L'ORDRE DES PORTS (Permet à ShouldRender de détecter les permutations)
+    // =========================================================================
+    public int OrderVersion { get; private set; } = 0;
+
 
     /// <summary>
     /// Permute deux entrées consécutives dans la recette et répercute le changement sur les ports.
@@ -247,6 +252,9 @@ public class MachineNodeModel : NodeModel
                 link.Refresh();
             }
         }
+
+        // Incrémente la version d'ordre pour forcer le rendu Blazor
+        OrderVersion++;
 
         // 7. Notifier le nœud pour mettre à jour son interface
         Refresh();
@@ -326,6 +334,9 @@ public class MachineNodeModel : NodeModel
                 link.Refresh();
             }
         }
+
+        // Incrémente la version d'ordre pour forcer le rendu Blazor
+        OrderVersion++;
 
         // 7. Notifier le nœud pour mettre à jour l'affichage Blazor
         Refresh();
@@ -417,6 +428,14 @@ public class MachineNodeModel : NodeModel
                 internalPortsList.AddRange(sortedOutputPorts);
             }
 
+
+            // =========================================================================
+            // Signale le changement d'ordre au composant MachineNodeWidget
+            // pour que ShouldRender() autorise la mise à jour visuelle immédiate
+            // =========================================================================
+            OrderVersion++;
+
+            // Notifie Blazor.Diagrams du rafraîchissement géométrique
             Refresh();
         }
     }
