@@ -3,25 +3,43 @@
 @using Blazor.Diagrams.Components.Renderers
 @using Blazor.Diagrams.Core
 @using Blazor.Diagrams.Core.Models
+@using Blazor.Diagrams.Core.Geometry
 @using CaptainArchitect.Models
 @inherits LinkWidget
 
 <g class="resource-link @(Link.Selected ? "selected" : "")"
    style="@StyleString"
+   @ondblclick="OnDoubleClick"
    @oncontextmenu="OnRightClick" 
    @oncontextmenu:preventDefault="true">
+
+    <!-- Infobulle native qui s'affiche au survol du câble -->
+    <title>Double-click: add a point | Right-click: delete the point / pipe</title>
+
+    <!-- Rendu natif SVG généré par Blazor.Diagrams (trajectoire path + poignées diagram-vertex) -->
     @base.BuildRenderTree
 </g>
 
+
 <style>
-    /* Épaisseur de la courbe / tuyau */
+
+    /* 1. STYLE DU CÂBLE / TUYAU SVG */
     .resource-link path {
         stroke: var(--link-color, #38bdf8) !important;
         stroke-width: 8px !important; /* Règle ici la largeur (ex: 8px, 10px ou 12px) */
         stroke-linecap: round !important; /* Bouts arrondis pour un rendu plus propre */
         stroke-linejoin: round !important;
         fill: none !important;
-        cursor: pointer;
+
+        /* Curseur en forme de réticule précis pour inciter à l'ajout de point */
+        cursor: crosshair !important;
+        pointer-events: stroke !important;
+        transition: stroke-width 0.15s ease;
+    }
+
+    /* Épaississement dynamique au survol pour indiquer que le tuyau est interactif */
+    .resource-link path:hover {
+        stroke-width: 10px !important;
     }
 
     /* Style quand la courbe est sélectionnée */
@@ -29,18 +47,93 @@
         stroke: #fbbf24 !important; /* Jaune de sélection */
         stroke-width: 10px !important; /* Légèrement plus large au clic */
     }
+
+    /* 2. STYLE DES POINTS DE PASSAGE (VERTICES) */
+    .diagram-vertex {
+        fill: #fbbf24 !important;
+        stroke: #ffffff !important;
+        stroke-width: 2px !important;
+        width: 14px;
+        height: 14px;
+
+        /* Curseur 'grab' ou 'move' pour indiquer clairement qu'on peut l'attraper et le glisser */
+        cursor: grab !important;
+        transition: transform 0.15s ease, fill 0.15s ease;
+    }
+
+    /* Curseur 'grabbing' quand on clique et déplace le point */
+    .diagram-vertex:active {
+        cursor: grabbing !important;
+    }
+
+    /* Survol d'un point existant : devient rouge pour avertir de la suppression au clic droit */
+    .diagram-vertex:hover {
+        fill: #ef4444 !important; /* Rouge d'alerte suppression */
+        stroke: #fca5a5 !important;
+        transform: scale(1.25);
+    }
+
 </style>
+
+
 
 @code {
     [CascadingParameter] public BlazorDiagram Diagram { get; set; } = default!;
 
+    // Détermine la couleur hexadécimale de la ressource ou bleu par défaut
     private string StyleString => Link is ResourceLinkModel resLink && !string.IsNullOrWhiteSpace(resLink.Color)
         ? $"--link-color: {resLink.Color};"
         : "--link-color: #38bdf8;";
 
-    private void OnRightClick()
+    // =========================================================================
+    // AJOUT D'UN POINT DE PASSAGE (VERTEX) AU DOUBLE-CLIC
+    // =========================================================================
+    private void OnDoubleClick(MouseEventArgs e)
     {
-        Diagram.Links.Remove(Link);
+        if (Diagram == null || Link == null) return;
+
+        // CORRECTION : Passer explicitement ClientX et ClientY au lieu de l'objet 'e'
+        var canvasPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
+
+        // Ajout du point de contrôle sur le tracé de la liaison
+        Link.Vertices.Add(new LinkVertexModel(Link, canvasPoint));
+
+        // Rafraîchissement géométrique du lien
+        Link.Refresh();
     }
+
+
+
+    // =========================================================================
+    // GESTION DU CLIC DROIT : Point seul OU Tuyau complet
+    // =========================================================================
+    private void OnRightClick(MouseEventArgs e)
+    {
+        if (Diagram == null || Link == null) return;
+
+        // 1. Récupère la position du clic droit dans les coordonnées du diagramme
+        var clickPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
+
+        // Rayon de détection en pixels (un vertex fait environ 12px de large)
+        const double tolerance = 15.0;
+
+        // 2. Recherche si le clic droit a eu lieu directement sur un point de passage existant
+        var clickedVertex = Link.Vertices.FirstOrDefault(v =>
+            Math.Abs(v.Position.X - clickPoint.X) <= tolerance &&
+            Math.Abs(v.Position.Y - clickPoint.Y) <= tolerance);
+
+        if (clickedVertex != null)
+        {
+            // CAS 1 : Clic droit sur un point -> Supprime UNIQUEMENT ce point
+            Link.Vertices.Remove(clickedVertex);
+            Link.Refresh();
+        }
+        else
+        {
+            // CAS 2 : Clic droit sur le câble -> Supprime la courbe entière
+            Diagram.Links.Remove(Link);
+        }
+    }
+
 
 }

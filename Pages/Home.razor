@@ -923,7 +923,8 @@
             Zoom =
             {
                 Enabled = true,
-                Inverse = true // <-- Inverse directement le sens de la molette
+                // Inverse directement le sens de la molette
+                Inverse = true
             },
 
             Links =
@@ -931,12 +932,21 @@
                 // le PathGenerator décide de la manière de dessiner la ligne entre ces points
                 // (courbe, ligne droite ou angles brisés).
                 // StraightPathGenerator : trace des segments droits et nets entre les points calculés, supprimant toute courbure.
+                
                 DefaultPathGenerator = new SmoothPathGenerator(),
 
                 // le Router calcule uniquement les points de passage (les coordonnées $X, Y$), 
-                //DefaultRouter = new OrthogonalRouter(),
+                // DefaultRouter = new OrthogonalRouter(),
+                // DefaultPathGenerator = new StraightPathGenerator(),
 
                 EnableSnapping = true,
+
+                // =========================================================================
+                // ACTIVATION DES POINTS DE PASSAGE (VERTICES) SUR LES LIAISONS
+                // =========================================================================
+                // Autorise l'ajout et le déplacement de points intermédiaires
+                RequireTarget = true,
+
 
                 // Utilise notre modèle personnalisé lorsqu'un lien est tiré depuis un port
                 Factory = (diagram, source, position) =>
@@ -1232,7 +1242,7 @@
                     srcPort.Parent is NodeModel srcNode &&
                     tgtPort.Parent is NodeModel tgtNode)
                 {
-                    saveData.Links.Add(new SavedLinkData
+                    var savedLink = new SavedLinkData
                     {
                         SourceNodeId = srcNode.Id,
                         SourceProductId = srcPort.ProductId,
@@ -1241,7 +1251,16 @@
                         TargetNodeId = tgtNode.Id,
                         TargetProductId = tgtPort.ProductId,
                         TargetDirection = tgtPort.Direction
-                    });
+                    };
+
+                    // Mémorisation des points de passage
+                    foreach (var vertex in link.Vertices)
+                    {
+                        savedLink.Vertices.Add(new double[] { vertex.Position.X, vertex.Position.Y });
+                    }
+
+                    saveData.Links.Add(savedLink);
+
                 }
             }
 
@@ -1398,6 +1417,18 @@
                         if (ProductDict.TryGetValue(srcPort.ProductId, out var prod) && !string.IsNullOrWhiteSpace(prod.Color))
                         {
                             link.Color = prod.Color;
+                        }
+
+                        // Restauration des sommets / points de passage
+                        if (savedLink.Vertices != null)
+                        {
+                            foreach (var pt in savedLink.Vertices)
+                            {
+                                if (pt.Length == 2)
+                                {
+                                    link.Vertices.Add(new LinkVertexModel(link, new Blazor.Diagrams.Core.Geometry.Point(pt[0], pt[1])));
+                                }
+                            }
                         }
 
                         Diagram.Links.Add(link);

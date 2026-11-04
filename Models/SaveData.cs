@@ -62,6 +62,9 @@ public class SavedLinkData
     public string TargetProductId { get; set; } = string.Empty;
     public PortDirection TargetDirection { get; set; }
 
+    // Coordonnées X, Y des points de passage éventuels
+    public List<double[]> Vertices { get; set; } = new();
+
 }
 
 
