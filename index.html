@@ -8,7 +8,7 @@
     <!-- .github/workflows/deploy.yml   -->
     <!-- Pour remplacer <base href="/BlazorApp1/" /> par <base href="/BlazorApp1/" /> directement dans le dossier publié -->
     <base href="" />
-    <link href="_framework/dotnet.lkpjgcnpko.js" rel="preload" as="script" fetchpriority="high" crossorigin="anonymous" integrity="sha256-y4fVye5nlbj8Kg1iwJ6javARpkqIYGOOcpdMYdMMlfo=" />
+    <link href="_framework/dotnet.zeazwxn3kn.js" rel="preload" as="script" fetchpriority="high" crossorigin="anonymous" integrity="sha256-hWxeyUhYBQDzqg1mwW2+KUB/pjLrarf5U1t0pzC5qLk=" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -16,20 +16,20 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.lkpjgcnpko.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.bjoj0wmylw.js",
-    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.5nc8i5dl74.js"
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.5nc8i5dl74.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.zeazwxn3kn.js"
   },
   "scopes": {},
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.js": "sha256-y4fVye5nlbj8Kg1iwJ6javARpkqIYGOOcpdMYdMMlfo=",
-    "./_framework/dotnet.lkpjgcnpko.js": "sha256-y4fVye5nlbj8Kg1iwJ6javARpkqIYGOOcpdMYdMMlfo=",
+    "./_framework/dotnet.js": "sha256-hWxeyUhYBQDzqg1mwW2+KUB/pjLrarf5U1t0pzC5qLk=",
     "./_framework/dotnet.native.bjoj0wmylw.js": "sha256-CZ0IVZkLTIvee7n1yVvOitlJWNdj/YjaFgpMgliIM64=",
     "./_framework/dotnet.native.js": "sha256-CZ0IVZkLTIvee7n1yVvOitlJWNdj/YjaFgpMgliIM64=",
     "./_framework/dotnet.runtime.5nc8i5dl74.js": "sha256-/3dBg9sj1yLD3h0PDMHnNUXWs/2zWwIMEzom1Xz3Q40=",
-    "./_framework/dotnet.runtime.js": "sha256-/3dBg9sj1yLD3h0PDMHnNUXWs/2zWwIMEzom1Xz3Q40="
+    "./_framework/dotnet.runtime.js": "sha256-/3dBg9sj1yLD3h0PDMHnNUXWs/2zWwIMEzom1Xz3Q40=",
+    "./_framework/dotnet.zeazwxn3kn.js": "sha256-hWxeyUhYBQDzqg1mwW2+KUB/pjLrarf5U1t0pzC5qLk="
   }
 }</script>
 
@@ -42,6 +42,15 @@
     <link href="_content/Z.Blazor.Diagrams/default.styles.min.css" rel="stylesheet" />
 
 </head>
+
+
+<script>
+        // Bloque l'affichage du menu contextuel du navigateur lors d'un clic droit
+        document.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+        });
+</script>
+
 
 <body>
     <div id="app">
