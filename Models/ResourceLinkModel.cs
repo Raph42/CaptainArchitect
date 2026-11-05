@@ -13,6 +13,8 @@ public class ResourceLinkModel : LinkModel
     // Débit qui transite réellement dans ce lien spécifique (ex: 24/m)
     public decimal FlowRate { get; set; } = 0m;
 
+    // Débit maximum possible que cette liaison peut transporter (ex: 36)
+    public decimal MaxFlowRate { get; set; } = 0m;
 
     public ResourceLinkModel(Anchor source, Anchor? target = null)
         : base(source, target)

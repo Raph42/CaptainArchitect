@@ -9,7 +9,7 @@ public class LanguageService
     /// <summary>
     /// Version actuelle de l'application.
     /// </summary>
-    public const string AppVersion = "1.0.17";
+    public const string AppVersion = "1.0.18";
 
     /// <summary>
     /// Code de langue courante (par défaut "fr").

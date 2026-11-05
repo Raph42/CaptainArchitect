@@ -18,6 +18,7 @@ public static class FlowEngine
         foreach (var link in diagram.Links.OfType<ResourceLinkModel>())
         {
             link.FlowRate = 0m;
+            link.MaxFlowRate = 0m;
         }
 
         // 1. Réinitialiser les débits entrants et sortants distribués
@@ -293,7 +294,7 @@ public static class FlowEngine
 
 
             // =========================================================================
-            // AJOUT POUR LE LINK LABEL : Assigner le débit réel circulant dans ce câble
+            // AFFECTATION AU CÂBLE (ResourceLinkModel) :
             // =========================================================================
             var targetLink = diagram.Links
                 .OfType<ResourceLinkModel>()
@@ -303,10 +304,25 @@ public static class FlowEngine
 
             if (targetLink != null)
             {
-                // Stocke le débit effectif calculé (ex: 24/m) sur le câble
+                // 1. Débit réel circulant (Ligne 2)
                 targetLink.FlowRate = allocated;
 
-                // Demande au câble de redessiner sa pastille flottante
+                // 2. Débit max théorique : ON PREND DIRECTEMENT LA VALEUR DE LA 1ÈRE LIGNE DE LA MACHINE SOURCE !
+                // (Si le port source est une machine, on prend sa 1ère ligne GetOutputRatePerMin)
+                if (outputPort.Parent is MachineNodeModel sourceMachine)
+                {
+                    var sourceItem = sourceMachine.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
+                    targetLink.MaxFlowRate = sourceItem != null
+                        ? sourceMachine.GetOutputRatePerMin(sourceItem)
+                        : availableRate;
+                }
+                else
+                {
+                    // Si la source est un stockage, on prend ce qui entre dans le stockage
+                    targetLink.MaxFlowRate = availableRate;
+                }
+
+                // Force le câble à redessiner sa bulle
                 targetLink.Refresh();
             }
 

@@ -25,19 +25,28 @@
     @base.BuildRenderTree
 
     <!-- =========================================================================
-         PASTILLE FLOTTANTE (FLOW BADGE)
-         Positionnée au milieu exact de la trajectoire calculée du tuyau
+         PASTILLE FLOTTANTE (FLOW BADGE) : Débit réel / Débit max
          ========================================================================= -->
-    @if (MidPoint != null && ResLink != null && ResLink.FlowRate > 0)
+    @if (MidPoint != null && ResLink != null && (ResLink.FlowRate > 0 || ResLink.MaxFlowRate > 0))
     {
-        <!-- pointer-events="none" empêche la pastille de bloquer les clics sur le câble -->
-        <g class="flow-badge-group" transform="translate(@MidPoint.X.ToString(System.Globalization.CultureInfo.InvariantCulture), @MidPoint.Y.ToString(System.Globalization.CultureInfo.InvariantCulture))" pointer-events="none">
-            <!-- Fond sombre avec bordure à la couleur de la ressource -->
-            <rect x="-24" y="-10" width="48" height="20" rx="10" class="flow-badge-bg" />
+        <!--
+            pointer-events="none" empêche la bulle de bloquer le double-clic ou le clic droit sur le câble.
+            Utilisation de CultureInfo.InvariantCulture pour éviter les bugs de virgule décimale en SVG.
+        -->
+        <g class="flow-badge-group"
+           transform="translate(@MidPoint.X.ToString(System.Globalization.CultureInfo.InvariantCulture), @MidPoint.Y.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+           pointer-events="none">
 
-            <!-- Débit réel (ex: 24/m) -->
-            <text x="0" y="3.5" text-anchor="middle" class="flow-badge-text">
-                @(ResLink.FlowRate.ToString("0.#"))/m
+            <!--
+                Largeur ajustée à 76px (x="-38" width="76") pour afficher confortablement "24 / 36/m"
+            -->
+            <rect x="-38" y="-11" width="76" height="22" rx="11" class="flow-badge-bg" />
+
+            <!-- Débit réel / Max possible -->
+            <text x="0" y="4" text-anchor="middle" class="flow-badge-text">
+                <tspan class="flow-badge-val">@(ResLink.FlowRate.ToString("0.#"))</tspan>
+                <tspan class="flow-badge-sep"> max: </tspan>
+                <tspan class="flow-badge-max">@(ResLink.MaxFlowRate.ToString("0.#"))/m</tspan>
             </text>
         </g>
     }
@@ -109,16 +118,34 @@
         fill: #18181b; /* Fond sombre assorti au thème de l'application */
         stroke: var(--link-color, #38bdf8); /* Bordure aux couleurs de la ressource */
         stroke-width: 1.5px;
-        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+        filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.75));
     }
 
     .flow-badge-text {
         fill: #f4f4f5;
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-        font-size: 10px;
+        font-size: 9.5px;
         font-weight: 700;
         user-select: none;
         letter-spacing: 0.2px;
+    }
+
+    /* Chiffre du débit réel (en blanc lumineux / gras) */
+    .flow-badge-val {
+        fill: #f4f4f5 !important;
+        font-weight: 800 !important;
+    }
+
+    /* Séparateur ' / ' */
+    .flow-badge-sep {
+        fill: #71717a !important;
+        font-weight: normal;
+    }
+
+    /* Débit max possible (en gris clair atténué) */
+    .flow-badge-max {
+        fill: #a1a1aa !important;
+        font-weight: 600 !important;
     }
 
 </style>
