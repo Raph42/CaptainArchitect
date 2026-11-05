@@ -7,10 +7,16 @@ namespace CaptainArchitect.Models;
 
 public class ResourceLinkModel : LinkModel
 {
+    // Couleur du câble selon la ressource transportée
     public string Color { get; set; } = "#38bdf8";
+
+    // Débit qui transite réellement dans ce lien spécifique (ex: 24/m)
+    public decimal FlowRate { get; set; } = 0m;
+
 
     public ResourceLinkModel(Anchor source, Anchor? target = null)
         : base(source, target)
     {
     }
+
 }

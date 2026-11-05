@@ -14,6 +14,12 @@ public static class FlowEngine
         var machineNodes = diagram.Nodes.OfType<MachineNodeModel>().ToList();
         var storageNodes = diagram.Nodes.OfType<StorageNodeModel>().ToList();
 
+        // 0. Réinitialiser le débit de tous les câbles
+        foreach (var link in diagram.Links.OfType<ResourceLinkModel>())
+        {
+            link.FlowRate = 0m;
+        }
+
         // 1. Réinitialiser les débits entrants et sortants distribués
         foreach (var node in machineNodes)
         {
@@ -284,6 +290,26 @@ public static class FlowEngine
             {
                 targetStorage.TotalInputRate += allocated;
             }
+
+
+            // =========================================================================
+            // AJOUT POUR LE LINK LABEL : Assigner le débit réel circulant dans ce câble
+            // =========================================================================
+            var targetLink = diagram.Links
+                .OfType<ResourceLinkModel>()
+                .FirstOrDefault(l =>
+                    ((l.Source as SinglePortAnchor)?.Port == outputPort && (l.Target as SinglePortAnchor)?.Port == targetPort) ||
+                    ((l.Target as SinglePortAnchor)?.Port == outputPort && (l.Source as SinglePortAnchor)?.Port == targetPort));
+
+            if (targetLink != null)
+            {
+                // Stocke le débit effectif calculé (ex: 24/m) sur le câble
+                targetLink.FlowRate = allocated;
+
+                // Demande au câble de redessiner sa pastille flottante
+                targetLink.Refresh();
+            }
+
         }
     }
 
