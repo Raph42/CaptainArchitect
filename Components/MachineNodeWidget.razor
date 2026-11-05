@@ -1203,16 +1203,21 @@ Dans Pages/Home.razor
     // Mémorise la modification de l'ordre des entrées et sorties
     private int _lastOrderVersion = -1;
 
-
+    // Mémorise la demande demandée par les machines suivantes en aval (Downstream Demand)
+    private decimal _lastTotalDownstreamDemand = -1;
 
     protected override bool ShouldRender()
     {
-        // Calcule la somme des flux réels actuels
+        // 1. Somme des flux d'entrées reçus et des sorties distribuées
         decimal currentInputs = Node.ActualInputRates.Values.Sum();
         decimal currentOutputs = Node.DistributedOutputRates.Values.Sum();
+
+        // 2. Somme de la demande des machines clientes connectées en aval
+        decimal currentDownstream = Node.DownstreamDemandRates.Values.Sum();
+
         int currentLinksCount = Node.Ports.Sum(p => p.Links.Count);
 
-        // Si l'un des débits, l'ordre des ports, l'efficacité, les liaisons ou la sélection a changé : on réaffiche
+        // Si la demande aval (ou n'importe quel autre paramètre) a changé, on autorise le rendu
         if (Node.Multiplier != _lastMultiplier ||
             Node.IsPaused != _lastIsPaused ||
             Node.OperationalEfficiency != _lastEfficiency ||
@@ -1221,6 +1226,7 @@ Dans Pages/Home.razor
             Node.OrderVersion != _lastOrderVersion ||
             currentInputs != _lastTotalInputRates ||
             currentOutputs != _lastTotalOutputRates ||
+            currentDownstream != _lastTotalDownstreamDemand ||
             currentLinksCount != _lastConnectedLinksCount)
         {
             _lastMultiplier = Node.Multiplier;
@@ -1231,6 +1237,7 @@ Dans Pages/Home.razor
             _lastOrderVersion = Node.OrderVersion;
             _lastTotalInputRates = currentInputs;
             _lastTotalOutputRates = currentOutputs;
+            _lastTotalDownstreamDemand = currentDownstream;
             _lastConnectedLinksCount = currentLinksCount;
             return true;
         }
