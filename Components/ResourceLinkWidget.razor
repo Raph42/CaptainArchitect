@@ -5,6 +5,7 @@
 @using Blazor.Diagrams.Core.Models
 @using Blazor.Diagrams.Core.Geometry
 @using CaptainArchitect.Models
+@using Blazor.Diagrams.Core.Anchors
 @inherits LinkWidget
 
 <g class="resource-link @(Link.Selected ? "selected" : "")"
@@ -85,6 +86,8 @@
         ? $"--link-color: {resLink.Color};"
         : "--link-color: #38bdf8;";
 
+
+
     // =========================================================================
     // AJOUT D'UN POINT DE PASSAGE (VERTEX) AU DOUBLE-CLIC
     // =========================================================================
@@ -92,14 +95,98 @@
     {
         if (Diagram == null || Link == null) return;
 
-        // CORRECTION : Passer explicitement ClientX et ClientY au lieu de l'objet 'e'
-        var canvasPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
+        // 1. Convertit les coordonnées de la souris (écran) vers le repère du diagramme
+        var clickPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
 
-        // Ajout du point de contrôle sur le tracé de la liaison
-        Link.Vertices.Add(new LinkVertexModel(Link, canvasPoint));
+        // 2. Si le lien ne contient encore aucun point intermédiaire, ajout direct
+        if (Link.Vertices.Count == 0)
+        {
+            Link.Vertices.Add(new LinkVertexModel(Link, clickPoint));
+            Link.Refresh();
+            return;
+        }
 
-        // Rafraîchissement géométrique du lien
+        // 3. Récupère la liste complète et ordonnée de tous les points formant le câble :
+        // [Point Source] -> [Sommet 0] -> [Sommet 1] -> ... -> [Point Cible]
+        var allPoints = new List<Blazor.Diagrams.Core.Geometry.Point>();
+
+        // --- POINT DE DÉPART (SOURCE) ---
+        // On récupère la position calculée de l'ancre source, ou le milieu de son port[cite: 17]
+        var sourcePos = Link.Source.GetPosition(Link)
+                     ?? (Link.Source as SinglePortAnchor)?.Port.MiddlePosition
+                     ?? clickPoint;
+        allPoints.Add(sourcePos);
+
+        // --- POINTS DE PASSAGE EXISTANTS ---
+        foreach (var v in Link.Vertices)
+        {
+            allPoints.Add(v.Position);
+        }
+
+        // --- POINT D'ARRIVÉE (CIBLE) ---
+        // On récupère la position calculée de l'ancre cible[cite: 17]
+        var targetPos = Link.Target?.GetPosition(Link)
+                     ?? (Link.Target as SinglePortAnchor)?.Port.MiddlePosition
+                     ?? sourcePos;
+        allPoints.Add(targetPos);
+
+        // 4. Détermine quel segment consécutif est le plus proche de l'endroit double-cliqué
+        int bestSegmentIndex = 0;
+        double minDistance = double.MaxValue;
+
+        for (int i = 0; i < allPoints.Count - 1; i++)
+        {
+            var pA = allPoints[i];
+            var pB = allPoints[i + 1];
+
+            double dist = DistanceToSegment(clickPoint, pA, pB);
+            if (dist < minDistance)
+            {
+                minDistance = dist;
+                bestSegmentIndex = i; // Segment détecté entre point i et point i+1
+            }
+        }
+
+        // 5. Insère le point à l'index précis dans la collection Vertices pour éviter les boucles
+        int insertIndex = Math.Clamp(bestSegmentIndex, 0, Link.Vertices.Count);
+        Link.Vertices.Insert(insertIndex, new LinkVertexModel(Link, clickPoint));
+
+        // 6. Rafraîchit la courbe
         Link.Refresh();
+    }
+
+
+
+    /// <summary>
+    /// Calcule la distance orthogonale la plus courte entre un point cliqué P et un segment de droite [A, B].
+    /// </summary>
+    private double DistanceToSegment(Blazor.Diagrams.Core.Geometry.Point p,
+                                     Blazor.Diagrams.Core.Geometry.Point a,
+                                     Blazor.Diagrams.Core.Geometry.Point b)
+    {
+        double dx = b.X - a.X;
+        double dy = b.Y - a.Y;
+        double lengthSquared = dx * dx + dy * dy;
+
+        // Si le segment est de longueur nulle (points superposés)
+        if (lengthSquared == 0)
+        {
+            double diffX = p.X - a.X;
+            double diffY = p.Y - a.Y;
+            return Math.Sqrt(diffX * diffX + diffY * diffY);
+        }
+
+        // Projection du point P sur la droite (A, B) bornée entre 0.0 et 1.0 (segment fermé)
+        double t = Math.Max(0, Math.Min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lengthSquared));
+
+        // Coordonnées du point projeté le plus proche sur le segment
+        double projX = a.X + t * dx;
+        double projY = a.Y + t * dy;
+
+        double deltaX = p.X - projX;
+        double deltaY = p.Y - projY;
+
+        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
 
