@@ -38,16 +38,28 @@
            pointer-events="none">
 
             <!--
-                Largeur ajustée à 76px (x="-38" width="76") pour afficher confortablement "24 / 36/m"
+                Fond arrondi ajusté pour 2 lignes de texte :
+                Largeur = 58px (x="-29")
+                Hauteur = 34px (y="-17") avec coins arrondis rx="7"
             -->
-            <rect x="-38" y="-11" width="76" height="22" rx="11" class="flow-badge-bg" />
+            <rect x="-29" y="-17" width="58" height="20" rx="7" class="flow-badge-bg" />
 
-            <!-- Débit réel / Max possible -->
-            <text x="0" y="4" text-anchor="middle" class="flow-badge-text">
-                <tspan class="flow-badge-val">@(ResLink.FlowRate.ToString("0.#"))</tspan>
-                <tspan class="flow-badge-sep"> max: </tspan>
-                <tspan class="flow-badge-max">@(ResLink.MaxFlowRate.ToString("0.#"))/m</tspan>
+            <!--
+                Bloc texte centré verticalement :
+                - Ligne 1 : Débit circulant réel (ex: 24/m)
+                - Ligne 2 (dy="1.25em", x="0") : Saut de ligne pour afficher max: 36/m
+            -->
+            <text x="0" y="-3" text-anchor="middle" class="flow-badge-text">
+                <!-- Ligne 1 : Débit réel -->
+                <tspan x="0" class="flow-badge-val">@(ResLink.FlowRate.ToString("0.#"))/m</tspan>
+
+                <!-- Ligne 2 : Retour à la ligne avec décalage dy 
+                <tspan x="0" dy="1.25em" class="flow-badge-max">
+                    max @(ResLink.MaxFlowRate.ToString("0.#"))/m
+                </tspan>
+                -->
             </text>
+
         </g>
     }
 
@@ -118,34 +130,26 @@
         fill: #18181b; /* Fond sombre assorti au thème de l'application */
         stroke: var(--link-color, #38bdf8); /* Bordure aux couleurs de la ressource */
         stroke-width: 1.5px;
-        filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.75));
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
     }
 
     .flow-badge-text {
-        fill: #f4f4f5;
-        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-        font-size: 9.5px;
-        font-weight: 700;
-        user-select: none;
-        letter-spacing: 0.2px;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+        user-select: none !important;
     }
 
-    /* Chiffre du débit réel (en blanc lumineux / gras) */
+    /* Ligne 1 : Valeur actuelle (blanc lumineux, plus gros et gras) */
     .flow-badge-val {
-        fill: #f4f4f5 !important;
+        font-size: 10px !important;
         font-weight: 800 !important;
+        fill: #f4f4f5 !important;
     }
 
-    /* Séparateur ' / ' */
-    .flow-badge-sep {
-        fill: #71717a !important;
-        font-weight: normal;
-    }
-
-    /* Débit max possible (en gris clair atténué) */
+    /* Ligne 2 : Mention max (gris plus discret, taille réduite) */
     .flow-badge-max {
+        font-size: 9px !important;
+        font-weight: 700 !important;
         fill: #a1a1aa !important;
-        font-weight: 600 !important;
     }
 
 </style>
