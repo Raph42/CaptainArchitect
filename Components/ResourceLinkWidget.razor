@@ -1,16 +1,14 @@
-﻿@* injecter le style stroke en ligne directement avec la couleur de la ressource *@
-
-@using Blazor.Diagrams.Components.Renderers
+﻿@using Blazor.Diagrams.Components.Renderers
 @using Blazor.Diagrams.Core
 @using Blazor.Diagrams.Core.Models
 @using Blazor.Diagrams.Core.Geometry
-@using CaptainArchitect.Models
 @using Blazor.Diagrams.Core.Anchors
+@using CaptainArchitect.Models
 @inherits LinkWidget
 
 <!--
     Conteneur global SVG du lien.
-    Intercepte le double-clic pour ajouter un point et le clic droit pour supprimer (point ou câble).
+    Intercepte le double-clic pour ajouter un point et le clic droit pour supprimer.
 -->
 <g class="resource-link @(Link.Selected ? "selected" : "")"
    style="@StyleString"
@@ -18,24 +16,29 @@
    @oncontextmenu="OnRightClick" 
    @oncontextmenu:preventDefault="true">
 
-    <!-- Infobulle native qui s'affiche au survol du câble -->
-    <title>Double-click: add a point | Right-click: delete the point / pipe</title>
+    <title>Double-clic : ajouter un point | Clic droit : redresser ou supprimer</title>
 
-    <!-- Rendu natif SVG généré par Blazor.Diagrams (trajectoire path + poignées diagram-vertex) -->
+    <!-- Rendu SVG natif généré par Blazor.Diagrams (trajectoire du tuyau) -->
     @base.BuildRenderTree
 
     <!-- =========================================================================
-         PASTILLE FLOTTANTE (FLOW BADGE) : Débit réel / Débit max
+         1. PASTILLE DE DÉBIT INTERACTIVE ET DÉPLAÇABLE
          ========================================================================= -->
-    @if (MidPoint != null && ResLink != null && (ResLink.FlowRate > 0 || ResLink.MaxFlowRate > 0))
+    @if (BadgePosition != null && ResLink != null && (ResLink.FlowRate > 0 || ResLink.MaxFlowRate > 0))
     {
-        <!--
-            pointer-events="none" empêche la bulle de bloquer le double-clic ou le clic droit sur le câble.
-            Utilisation de CultureInfo.InvariantCulture pour éviter les bugs de virgule décimale en SVG.
+        <!-- 
+            - pointer-events="all" : capture le clic gauche et le glisser-déposer sur la pastille.
+            - @onpointerdown : démarre le déplacement et active le suivi de souris.
+            - @oncontextmenu : clic droit sur la pastille pour redresser le câble.
         -->
-        <g class="flow-badge-group"
-           transform="translate(@MidPoint.X.ToString(System.Globalization.CultureInfo.InvariantCulture), @MidPoint.Y.ToString(System.Globalization.CultureInfo.InvariantCulture))"
-           pointer-events="none">
+        <g class="flow-badge-group @(_isDraggingBadge ? "dragging" : "")"
+           transform="translate(@BadgePosition.X.ToString(System.Globalization.CultureInfo.InvariantCulture), @BadgePosition.Y.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+           pointer-events="all"
+           @onpointerdown="OnBadgePointerDown"
+           @onpointerdown:stopPropagation="true"
+           @oncontextmenu="OnBadgeRightClick"
+           @oncontextmenu:stopPropagation="true"
+           @oncontextmenu:preventDefault="true">
 
             <!--
                 Fond arrondi ajusté pour 2 lignes de texte :
@@ -53,7 +56,7 @@
                 <!-- Ligne 1 : Débit réel -->
                 <tspan x="0" class="flow-badge-val">@(ResLink.FlowRate.ToString("0.#"))/m</tspan>
 
-                <!-- Ligne 2 : Retour à la ligne avec décalage dy 
+                <!-- Ligne 2 : Retour à la ligne avec décalage dy
                 <tspan x="0" dy="1.25em" class="flow-badge-max">
                     max @(ResLink.MaxFlowRate.ToString("0.#"))/m
                 </tspan>
@@ -63,98 +66,102 @@
         </g>
     }
 
+    <!-- =========================================================================
+         2. CALQUE DE CAPTURE DE SOURIS (Actif uniquement pendant le déplacement)
+         Empêche le curseur de décrocher, quelle que soit la vitesse du geste.
+         ========================================================================= -->
+    @if (_isDraggingBadge)
+    {
+        <rect class="drag-capture-overlay"
+              x="-50000" y="-50000" width="100000" height="100000"
+              fill="transparent"
+              pointer-events="all"
+              style="cursor: grabbing;"
+              @onpointermove="OnDragMove"
+              @onpointerup="OnDragUp"
+              @onpointercancel="OnDragUp"
+              @onclick:stopPropagation="true"
+              @onpointerdown:stopPropagation="true" />
+    }
+
 </g>
 
-
 <style>
-
     /* 1. STYLE DU CÂBLE / TUYAU SVG */
     .resource-link path {
         stroke: var(--link-color, #38bdf8) !important;
-        stroke-width: 8px !important; /* Règle ici la largeur (ex: 8px, 10px ou 12px) */
-        stroke-linecap: round !important; /* Bouts arrondis pour un rendu plus propre */
+        stroke-width: 8px !important;
+        stroke-linecap: round !important;
         stroke-linejoin: round !important;
         fill: none !important;
-
-        /* Curseur en forme de réticule précis pour inciter à l'ajout de point */
-        /* cursor: crosshair !important; */
-        cursor: pointer !important;
+        cursor: crosshair !important;
         pointer-events: stroke !important;
         transition: stroke-width 0.15s ease;
     }
 
-
-    /* Épaississement dynamique au survol pour indiquer que le tuyau est interactif */
     .resource-link path:hover {
         stroke-width: 11px !important;
     }
 
-
-    /* Style quand la courbe est sélectionnée */
     .resource-link.selected path {
-        stroke: #fbbf24 !important; /* Jaune de sélection */
-        stroke-width: 12px !important; /* Légèrement plus large au clic */
+        stroke: #fbbf24 !important;
+        stroke-width: 12px !important;
     }
 
-
-    /* 2. STYLE DES POINTS DE PASSAGE (VERTICES) */
+    /* =========================================================================
+       2. MASQUAGE DÉFINITIF DU POINT DE CONTRÔLE (VERTEX)
+       Empêche l'affichage du carré / point noir de Blazor.Diagrams à l'extérieur
+       ========================================================================= */
+    ::deep .diagram-vertex,
+    .resource-link ::deep .diagram-vertex,
+    .resource-link ::deep circle,
     .diagram-vertex {
-        fill: #fbbf24 !important;
-        stroke: #ffffff !important;
-        stroke-width: 2px !important;
-        width: 14px;
-        height: 14px;
-
-        /* Curseur 'grab' ou 'move' pour indiquer clairement qu'on peut l'attraper et le glisser */
-        cursor: grab !important;
-        transition: transform 0.15s ease, fill 0.15s ease;
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
 
+    /* 3. PASTILLE INDICATRICE DE DÉBIT INTERACTIVE */
+    .flow-badge-group {
+        cursor: grab !important;
+    }
 
-    /* Curseur 'grabbing' quand on clique et déplace le point */
-    .diagram-vertex:active {
+    .flow-badge-group.dragging {
         cursor: grabbing !important;
     }
 
-
-    /* Survol d'un point existant : devient rouge pour avertir de la suppression au clic droit */
-    .diagram-vertex:hover {
-        fill: #ef4444 !important; /* Rouge d'alerte suppression */
-        stroke: #fca5a5 !important;
-        transform: scale(1.3);
+    .flow-badge-bg {
+        fill: #18181b !important;
+        stroke: var(--link-color, #38bdf8) !important;
+        stroke-width: 1.5px !important;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
+        transition: stroke-width 0.1s ease;
     }
 
-
-    /* 3. PASTILLE INDICATRICE DE DÉBIT AU MILIEU DU CÂBLE */
-    .flow-badge-bg {
-        fill: #18181b; /* Fond sombre assorti au thème de l'application */
-        stroke: var(--link-color, #38bdf8); /* Bordure aux couleurs de la ressource */
-        stroke-width: 1.5px;
-        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
+    .flow-badge-group:hover .flow-badge-bg {
+        stroke-width: 2.2px !important;
+        stroke: #fbbf24 !important; /* Liseré doré au survol */
     }
 
     .flow-badge-text {
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif !important;
         user-select: none !important;
+        pointer-events: none;
     }
 
-    /* Ligne 1 : Valeur actuelle (blanc lumineux, plus gros et gras) */
     .flow-badge-val {
         font-size: 10px !important;
         font-weight: 800 !important;
         fill: #f4f4f5 !important;
     }
 
-    /* Ligne 2 : Mention max (gris plus discret, taille réduite) */
     .flow-badge-max {
-        font-size: 9px !important;
+        font-size: 8.5px !important;
         font-weight: 700 !important;
         fill: #a1a1aa !important;
     }
-
 </style>
-
-
 
 @code {
     [CascadingParameter] public BlazorDiagram Diagram { get; set; } = default!;
@@ -167,209 +174,168 @@
         ? $"--link-color: {resLink.Color};"
         : "--link-color: #38bdf8;";
 
-
+    // Gestion du déplacement à la souris
+    private bool _isDraggingBadge = false;
+    private LinkVertexModel? _dragVertex = null;
 
     /// <summary>
-    /// Calcule le point milieu (X, Y) du tracé du lien, en tenant compte des points de passage intermédiaires.
+    /// Position de la pastille :
+    /// - S'il y a un point de courbure, la pastille est posée pile dessus (elle suit ses coordonnées).
+    /// - Sinon, elle est calculée au milieu direct entre la source et la cible.
     /// </summary>
-    private Point? MidPoint
+    private Point? BadgePosition
     {
         get
         {
             if (Link == null) return null;
 
-            // Récupère tous les points formant le câble
-            var points = new List<Point>();
-
-            var src = Link.Source.GetPosition(Link)
-                   ?? (Link.Source as SinglePortAnchor)?.Port.MiddlePosition;
-            var tgt = Link.Target?.GetPosition(Link)
-                   ?? (Link.Target as SinglePortAnchor)?.Port.MiddlePosition;
-
-            if (src == null || tgt == null) return null;
-
-            points.Add(src);
-            foreach (var v in Link.Vertices)
+            // 1. Si on est en train de glisser ou qu'un point a été créé, suivre ce point
+            if (_dragVertex != null)
             {
-                points.Add(v.Position);
-            }
-            points.Add(tgt);
-
-            // Cas d'un lien direct sans sommets : milieu entre source et cible
-            if (points.Count == 2)
-            {
-                return new Point((points[0].X + points[1].X) / 2, (points[0].Y + points[1].Y) / 2);
+                return _dragVertex.Position;
             }
 
-            // Cas avec sommets multiples : calcul de la distance totale pour se placer exactement au milieu de la longueur
-            double totalLength = 0;
-            var segmentLengths = new double[points.Count - 1];
-
-            for (int i = 0; i < points.Count - 1; i++)
+            // 2. Si le lien possède déjà des sommets, on s'accroche sur le sommet central
+            if (Link.Vertices.Count > 0)
             {
-                double dx = points[i + 1].X - points[i].X;
-                double dy = points[i + 1].Y - points[i].Y;
-                segmentLengths[i] = Math.Sqrt(dx * dx + dy * dy);
-                totalLength += segmentLengths[i];
+                return Link.Vertices[Link.Vertices.Count / 2].Position;
             }
 
-            double halfLength = totalLength / 2.0;
-            double accumulated = 0;
-
-            for (int i = 0; i < segmentLengths.Length; i++)
-            {
-                if (accumulated + segmentLengths[i] >= halfLength)
-                {
-                    double remain = halfLength - accumulated;
-                    double ratio = segmentLengths[i] > 0 ? remain / segmentLengths[i] : 0.5;
-
-                    double midX = points[i].X + ratio * (points[i + 1].X - points[i].X);
-                    double midY = points[i].Y + ratio * (points[i + 1].Y - points[i].Y);
-
-                    return new Point(midX, midY);
-                }
-                accumulated += segmentLengths[i];
-            }
-
-            return new Point((src.X + tgt.X) / 2, (src.Y + tgt.Y) / 2);
+            // 3. Sinon, calcul automatique au milieu direct entre source et cible
+            return GetDefaultMidPoint();
         }
     }
 
+    // =========================================================================
+    // DÉPLACEMENT DE LA PASTILLE ET DU POINT À LA SOURIS
+    // =========================================================================
 
+    private void OnBadgePointerDown(PointerEventArgs e)
+    {
+        if (Diagram == null || Link == null) return;
+        if (e.Button != 0) return; // Seul le clic gauche déclenche le glissement
+
+        _isDraggingBadge = true;
+
+        // Récupère les coordonnées du clic sur le canvas
+        var canvasPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
+
+        // Si aucun point n'existe encore sur la courbe, on en insère un sous le clic
+        if (Link.Vertices.Count == 0)
+        {
+            _dragVertex = new LinkVertexModel(Link, canvasPoint);
+            Link.Vertices.Add(_dragVertex);
+        }
+        else
+        {
+            // Réutilise le point central existant
+            _dragVertex = Link.Vertices[Link.Vertices.Count / 2];
+            _dragVertex.SetPosition(canvasPoint.X, canvasPoint.Y);
+        }
+
+        Link.Refresh();
+    }
+
+    private void OnDragMove(PointerEventArgs e)
+    {
+        if (!_isDraggingBadge || _dragVertex == null || Diagram == null) return;
+
+        // Sécurité : arrêt immédiat si le bouton gauche a été relâché
+        if (e.Buttons == 0)
+        {
+            OnDragUp(e);
+            return;
+        }
+
+        // Met à jour la position du point via SetPosition pour forcer le routeur de Blazor.Diagrams
+        var newPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
+        _dragVertex.SetPosition(newPoint.X, newPoint.Y);
+
+        // Redessine le câble et met à jour la pastille en temps réel
+        Link.Refresh();
+    }
+
+    private void OnDragUp(PointerEventArgs e)
+    {
+        if (_isDraggingBadge)
+        {
+            _isDraggingBadge = false;
+            _dragVertex = null;
+
+            // Conserve la courbure finale
+            Link.Refresh();
+        }
+    }
 
     // =========================================================================
-    // AJOUT D'UN POINT DE PASSAGE (VERTEX) AU DOUBLE-CLIC
+    // GESTION DU CLIC DROIT
+    // =========================================================================
+
+    // Clic droit directement sur la pastille : supprime la courbure et redresse le câble
+    private void OnBadgeRightClick(MouseEventArgs e)
+    {
+        if (Link == null) return;
+
+        if (Link.Vertices.Count > 0)
+        {
+            Link.Vertices.Clear();
+            _dragVertex = null;
+            Link.Refresh();
+        }
+    }
+
+    // Clic droit sur le câble
+    private void OnRightClick(MouseEventArgs e)
+    {
+        if (Diagram == null || Link == null) return;
+
+        // Si le câble est courbé, le clic droit le redresse d'abord
+        if (Link.Vertices.Count > 0)
+        {
+            Link.Vertices.Clear();
+            _dragVertex = null;
+            Link.Refresh();
+        }
+        else
+        {
+            // Si le câble est déjà droit, le clic droit supprime la liaison
+            Diagram.Links.Remove(Link);
+        }
+    }
+
+    // =========================================================================
+    // POINT MILIEU PAR DÉFAUT
+    // =========================================================================
+    private Point? GetDefaultMidPoint()
+    {
+        var src = Link.Source.GetPosition(Link)
+               ?? (Link.Source as SinglePortAnchor)?.Port.MiddlePosition;
+        var tgt = Link.Target?.GetPosition(Link)
+               ?? (Link.Target as SinglePortAnchor)?.Port.MiddlePosition;
+
+        if (src == null || tgt == null) return null;
+
+        return new Point((src.X + tgt.X) / 2.0, (src.Y + tgt.Y) / 2.0);
+    }
+
+    // =========================================================================
+    // DOUBLE-CLIC MANUEL SUR LE CÂBLE (Optionnel pour ajouter d'autres points)[cite: 8]
     // =========================================================================
     private void OnDoubleClick(MouseEventArgs e)
     {
         if (Diagram == null || Link == null) return;
 
-        // 1. Convertit les coordonnées de la souris (écran) vers le repère du diagramme
         var clickPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
 
-        // 2. Si le lien ne contient encore aucun point intermédiaire, ajout direct
         if (Link.Vertices.Count == 0)
         {
             Link.Vertices.Add(new LinkVertexModel(Link, clickPoint));
-            Link.Refresh();
-            return;
-        }
-
-        // 3. Récupère la liste complète et ordonnée de tous les points formant le câble :
-        // [Point Source] -> [Sommet 0] -> [Sommet 1] -> ... -> [Point Cible]
-        var allPoints = new List<Blazor.Diagrams.Core.Geometry.Point>();
-
-        // --- POINT DE DÉPART (SOURCE) ---
-        // On récupère la position calculée de l'ancre source, ou le milieu de son port[cite: 17]
-        var sourcePos = Link.Source.GetPosition(Link)
-                     ?? (Link.Source as SinglePortAnchor)?.Port.MiddlePosition
-                     ?? clickPoint;
-        allPoints.Add(sourcePos);
-
-        // --- POINTS DE PASSAGE EXISTANTS ---
-        foreach (var v in Link.Vertices)
-        {
-            allPoints.Add(v.Position);
-        }
-
-        // --- POINT D'ARRIVÉE (CIBLE) ---
-        // On récupère la position calculée de l'ancre cible[cite: 17]
-        var targetPos = Link.Target?.GetPosition(Link)
-                     ?? (Link.Target as SinglePortAnchor)?.Port.MiddlePosition
-                     ?? sourcePos;
-        allPoints.Add(targetPos);
-
-        // 4. Détermine quel segment consécutif est le plus proche de l'endroit double-cliqué
-        int bestSegmentIndex = 0;
-        double minDistance = double.MaxValue;
-
-        for (int i = 0; i < allPoints.Count - 1; i++)
-        {
-            var pA = allPoints[i];
-            var pB = allPoints[i + 1];
-
-            double dist = DistanceToSegment(clickPoint, pA, pB);
-            if (dist < minDistance)
-            {
-                minDistance = dist;
-                bestSegmentIndex = i; // Segment détecté entre point i et point i+1
-            }
-        }
-
-        // 5. Insère le point à l'index précis dans la collection Vertices pour éviter les boucles
-        int insertIndex = Math.Clamp(bestSegmentIndex, 0, Link.Vertices.Count);
-        Link.Vertices.Insert(insertIndex, new LinkVertexModel(Link, clickPoint));
-
-        // 6. Rafraîchit la courbe
-        Link.Refresh();
-    }
-
-
-
-    /// <summary>
-    /// Calcule la distance orthogonale la plus courte entre un point cliqué P et un segment de droite [A, B].
-    /// </summary>
-    private double DistanceToSegment(Blazor.Diagrams.Core.Geometry.Point p,
-                                     Blazor.Diagrams.Core.Geometry.Point a,
-                                     Blazor.Diagrams.Core.Geometry.Point b)
-    {
-        double dx = b.X - a.X;
-        double dy = b.Y - a.Y;
-        double lengthSquared = dx * dx + dy * dy;
-
-        // Si le segment est de longueur nulle (points superposés)
-        if (lengthSquared == 0)
-        {
-            double diffX = p.X - a.X;
-            double diffY = p.Y - a.Y;
-            return Math.Sqrt(diffX * diffX + diffY * diffY);
-        }
-
-        // Projection du point P sur la droite (A, B) bornée entre 0.0 et 1.0 (segment fermé)
-        double t = Math.Max(0, Math.Min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lengthSquared));
-
-        // Coordonnées du point projeté le plus proche sur le segment
-        double projX = a.X + t * dx;
-        double projY = a.Y + t * dy;
-
-        double deltaX = p.X - projX;
-        double deltaY = p.Y - projY;
-
-        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
-    }
-
-
-
-    // =========================================================================
-    // GESTION DU CLIC DROIT : Point seul OU Tuyau complet
-    // =========================================================================
-    private void OnRightClick(MouseEventArgs e)
-    {
-        if (Diagram == null || Link == null) return;
-
-        // 1. Récupère la position du clic droit dans les coordonnées du diagramme
-        var clickPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
-
-        // Rayon de détection en pixels (un vertex fait environ 12px de large)
-        const double tolerance = 15.0;
-
-        // 2. Recherche si le clic droit a eu lieu directement sur un point de passage existant
-        var clickedVertex = Link.Vertices.FirstOrDefault(v =>
-            Math.Abs(v.Position.X - clickPoint.X) <= tolerance &&
-            Math.Abs(v.Position.Y - clickPoint.Y) <= tolerance);
-
-        if (clickedVertex != null)
-        {
-            // CAS 1 : Clic droit sur un point -> Supprime UNIQUEMENT ce point
-            Link.Vertices.Remove(clickedVertex);
-            Link.Refresh();
         }
         else
         {
-            // CAS 2 : Clic droit sur le câble -> Supprime la courbe entière
-            Diagram.Links.Remove(Link);
+            Link.Vertices.Insert(Link.Vertices.Count / 2, new LinkVertexModel(Link, clickPoint));
         }
+
+        Link.Refresh();
     }
-
-
 }
