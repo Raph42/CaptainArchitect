@@ -3,12 +3,15 @@
 @inject ResourceService ResourceService
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
 @using System.Text.Json
 
 @implements IDisposable
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Options
 @using Blazor.Diagrams.Core.Anchors;
+@using Blazor.Diagrams.Core.Behaviors;
 @using Blazor.Diagrams.Core.Models;
 @using Blazor.Diagrams.Core.Models.Base;
 @using Blazor.Diagrams.Core.Geometry
@@ -659,6 +662,11 @@
     private int _loadingProgress = 0;
     private string _loadingStatusText = "";
 
+    // =======================================================================================================
+    // Verrou pour bloquer les recalculs en chaîne pendant un chargement ou un nettoyage massif du diagramme
+    // =======================================================================================================
+    private bool _isBulkUpdating = false;
+
     // =========================================================================
     // GESTION DU DÉCALAGE EN CASCADE POUR LES NOUVEAUX ÉLÉMENTS ET CLONES
     // =========================================================================
@@ -978,14 +986,25 @@
         Diagram = new BlazorDiagram(options);
 
         // =========================================================================
+        // DÉSACTIVATION DE LA SUPPRESSION NATIVES SUR LA TOUCHE "DELETE"
+        // Empêche Blazor.Diagrams de supprimer les liens tout seul sans passer par
+        // notre méthode HandleKeyDown (et donc sans afficher la confirmation).
+        // =========================================================================
+        Diagram.UnregisterBehavior<KeyboardShortcutsBehavior>();
+
+        // =========================================================================
         // ABONNEMENTS OPTIMISÉS : Recalcul UNIQUEMENT lors des vraies modifications
         // (Suppression de link.Changed pour éviter les 60 recalculs/sec pendant le drag)
         // =========================================================================
         Diagram.Links.Added += link =>
         {
             // Recalcul quand le lien s'accroche définitivement sur le port cible
+            // (hors chargement de fichier)
             link.TargetAttached += _ =>
             {
+                // Évite les recalculs pendant LoadDiagram
+                if (_isBulkUpdating) return;
+
                 FlowEngine.RecalculateFlows(Diagram, ResourceService);
                 InvokeAsync(StateHasChanged);
             };
@@ -994,6 +1013,9 @@
         // Recalcul lorsqu'une liaison est supprimée (au clic droit ou touche Suppr)
         Diagram.Links.Removed += _ => 
         {
+            // Évite les recalculs pendant LoadDiagram
+            if (_isBulkUpdating) return;
+
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
             InvokeAsync(StateHasChanged);
         };
@@ -1001,6 +1023,9 @@
         // Recalcul lorsqu'une machine ou un stockage est supprimé
         Diagram.Nodes.Removed += _ => 
         {
+            // Évite les recalculs pendant LoadDiagram
+            if (_isBulkUpdating) return;
+
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
             InvokeAsync(StateHasChanged);
         };
@@ -1089,42 +1114,61 @@
     }
 
 
-    private void HandleKeyDown(KeyboardEventArgs e)
+    /// <summary>
+    /// Gère la suppression avec confirmation pour les liens (touches Delete et Backspace)
+    /// ainsi que la duplication (Ctrl + D).
+    /// </summary>
+    private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         // 1. Suppression des nœuds ou liens sélectionnés (Delete ou Backspace)
         if (e.Key is "Delete" or "Backspace")
         {
-            // 1. Récupère tous les liens sélectionnés et les supprime du diagramme
             var selectedLinks = Diagram.Links.Where(l => l.Selected).ToList();
+            var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
 
+            // Si au moins un tuyau est sélectionné (sans nœud), on affiche la confirmation
+            if (selectedLinks.Count > 0 && selectedNodes.Count == 0)
+            {
+                string message = selectedLinks.Count == 1
+                    ? "Do you really want to delete this link ?"
+                    : $"Do you really want to delete this {selectedLinks.Count} links ?";
+
+                // Ouverture de la boîte de dialogue MudBlazor (syntaxe asynchrone v7+)
+                bool? confirm = await DialogService.ShowMessageBoxAsync(
+                    title: "Delete the link",
+                    message: message,
+                    yesText: "Delete",
+                    cancelText: "Cancel"
+                );
+
+                // Si l'utilisateur clique sur "Annuler" ou ferme la fenêtre, on stoppe tout
+                if (confirm != true) return;
+            }
+
+            // Suppression des liens sélectionnés
             foreach (var link in selectedLinks)
             {
                 Diagram.Links.Remove(link);
             }
 
-            // 2. Supprime également les nœuds sélectionnés s'il y en a
-            var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
-
+            // Suppression des nœuds sélectionnés
             foreach (var node in selectedNodes)
             {
                 Diagram.Nodes.Remove(node);
             }
 
+            // Recalcul des débits après suppression
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
-
-        // 2. Duplication par raccourci Ctrl + D ou Ctrl + d
+        // 2. Duplication par raccourci Ctrl + D
         else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
         {
-            // Récupère le dernier nœud sélectionné sur le diagramme
             var selectedNode = Diagram.Nodes.FirstOrDefault(n => n.Selected);
-
             if (selectedNode != null)
             {
-                _ = DuplicateNode(selectedNode);
+                await DuplicateNode(selectedNode);
             }
         }
-
     }
 
 
@@ -1183,9 +1227,22 @@
     /// </summary>
     private void ClearDiagram()
     {
-        // Supprime tous les liens puis tous les nœuds
-        Diagram.Links.Clear();
-        Diagram.Nodes.Clear();
+        try
+        {
+            // Active le verrou avant de vider les collections
+            _isBulkUpdating = true;
+
+            // Supprime tous les liens puis tous les nœuds
+            Diagram.Links.Clear();
+            Diagram.Nodes.Clear();
+        }
+        finally
+        {
+            // Relâche toujours le verrou, même en cas d'erreur
+            _isBulkUpdating = false;
+        }
+
+        // Un seul recalcul à la fin
         FlowEngine.RecalculateFlows(Diagram, ResourceService);
         StateHasChanged();
     }
@@ -1292,6 +1349,9 @@
 
         try
         {
+            // 1. Active le verrou dès le début pour bloquer les recalculs intermédiaires
+            _isBulkUpdating = true;
+
             // 1. Initialisation de l'état de chargement
             _isLoadingDiagram = true;
             _loadingProgress = 0;
@@ -1309,6 +1369,11 @@
             }
 
             // 2. Vider le diagramme actuel
+            // (instantané grâce à _isBulkUpdating = true)
+            _loadingStatusText = "Clearing previous factory...";
+            StateHasChanged();
+            await Task.Yield();
+
             Diagram.Links.Clear();
             Diagram.Nodes.Clear();
 
@@ -1344,9 +1409,8 @@
                         while (node.CurrentMachineId != savedNode.MachineId && node.Upgrade()) { }
                     }
 
-                    // RECONSTITUTION DE L'ORDRE DES PORTS
+                    // Reconstitution de l'ordre personnalisé des ports
                     node.ApplyCustomPortOrder(savedNode.OrderedInputProductIds, savedNode.OrderedOutputProductIds);
-
 
                     Diagram.Nodes.Add(node);
                     allNodesMap[savedNode.NodeId] = node;
@@ -1354,8 +1418,8 @@
 
 
                 currentStep++;
-                // Mise à jour de l'UI tous les 5 nœuds ou au dernier nœud pour rester fluide
-                if (i % 5 == 0 || i == totalNodes - 1)
+                // Mise à jour de l'UI tous les 25 nœuds pour garder un chargement très rapide
+                if (i % 10 == 0 || i == totalNodes - 1)
                 {
                     _loadingProgress = (int)((double)currentStep / totalOperations * 100);
                     _loadingStatusText = $"Creation of the machines ({i + 1}/{totalNodes})...";
@@ -1380,7 +1444,7 @@
                 allNodesMap[savedStorage.NodeId] = storageNode;
 
                 currentStep++;
-                if (s % 5 == 0 || s == totalStorages - 1)
+                if (s % 10 == 0 || s == totalStorages - 1)
                 {
                     _loadingProgress = (int)((double)currentStep / totalOperations * 100);
                     _loadingStatusText = $"Création des stockages ({s + 1}/{totalStorages})...";
@@ -1437,8 +1501,8 @@
 
 
                 currentStep++;
-                // Mise à jour de l'UI toutes les 10 liaisons
-                if (j % 10 == 0 || j == totalLinks - 1)
+                // Mise à jour de l'UI toutes les 20 liaisons
+                if (j % 20 == 0 || j == totalLinks - 1)
                 {
                     _loadingProgress = (int)((double)currentStep / totalOperations * 100);
                     _loadingStatusText = $"Reconnecting the pipes ({j + 1}/{totalLinks})...";
@@ -1448,14 +1512,15 @@
 
             }
 
-            // 6. Recalcul des flux
+            // 6. Finalisation : Désactive le verrou et lance UN SEUL calcul global des flux
             _loadingStatusText = "Flow calculation and balancing...";
             _loadingProgress = 100;
             StateHasChanged();
             await Task.Yield();
 
+            _isBulkUpdating = false;
             FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            StateHasChanged();
+            Diagram.Refresh();
 
             Snackbar.Add("Diagram successfully loaded !", Severity.Success);
         }
@@ -1465,7 +1530,8 @@
         }
         finally
         {
-            // 5. Fermeture de l'overlay de progression
+            // Sécurité : s'assure que le verrou et l'overlay sont toujours désactivés à la fin
+            _isBulkUpdating = false;
             _isLoadingDiagram = false;
             StateHasChanged();
         }

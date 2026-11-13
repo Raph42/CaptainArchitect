@@ -2,10 +2,14 @@
 
 @using Blazor.Diagrams.Components.Renderers
 @using Blazor.Diagrams.Core
-@using Blazor.Diagrams.Core.Models
-@using Blazor.Diagrams.Core.Geometry
-@using CaptainArchitect.Models
 @using Blazor.Diagrams.Core.Anchors
+@using Blazor.Diagrams.Core.Geometry
+@using Blazor.Diagrams.Core.Models
+@using CaptainArchitect.Models
+@* pour les dialogues MudBlazor *@
+@using MudBlazor
+@* service de fenêtre de confirmation *@
+@inject IDialogService DialogService
 @inherits LinkWidget
 
 
@@ -304,19 +308,24 @@
         }
     }
 
-    // 2. Clic droit sur le câble
-    private void OnRightClick(MouseEventArgs e)
+
+    // ============================================================================
+    // GESTION DU CLIC DROIT : Suppression d'un point OU confirmation pour le tuyau
+    // =============================================================================
+    private async Task OnRightClick(MouseEventArgs e)
     {
         if (Diagram == null || Link == null) return;
 
+        // 1. Récupère la position du clic droit dans les coordonnées du diagramme
         var clickPoint = Diagram.GetRelativeMousePoint(e.ClientX, e.ClientY);
 
-        // Rayon de détection confortable (28px) pour attraper un point sans rater
+        // Rayon de détection confortable (28px) pour attraper un point sans le rater
         const double toleranceDistanceSq = 28.0 * 28.0;
 
         LinkVertexModel? clickedVertex = null;
         double minDistanceSq = double.MaxValue;
 
+        // 2. Recherche si le clic droit a eu lieu sur un point de passage existant
         foreach (var v in Link.Vertices)
         {
             double distSq = Math.Pow(v.Position.X - clickPoint.X, 2) + Math.Pow(v.Position.Y - clickPoint.Y, 2);
@@ -339,8 +348,19 @@
         }
         else
         {
-            // CAS 2 : Clic droit sur le tracé du tuyau loin de tout point -> Supprime la courbe entière
-            Diagram.Links.Remove(Link);
+            // CAS 2 : Clic droit sur le tuyau -> Ouvre la fenêtre de confirmation
+            bool? confirm = await DialogService.ShowMessageBoxAsync(
+                title: "Remove the link",
+                message: "Do you really want to delete this link?",
+                yesText: "Delete",
+                cancelText: "Cancel"
+            );
+
+            // Si l'utilisateur a cliqué sur "Supprimer" (confirm == true), on retire le lien
+            if (confirm == true)
+            {
+                Diagram.Links.Remove(Link);
+            }
         }
     }
 
