@@ -662,15 +662,14 @@
     private int _loadingProgress = 0;
     private string _loadingStatusText = "";
 
-    // =======================================================================================================
     // Verrou pour bloquer les recalculs en chaîne pendant un chargement ou un nettoyage massif du diagramme
-    // =======================================================================================================
     private bool _isBulkUpdating = false;
 
-    // =========================================================================
-    // GESTION DU DÉCALAGE EN CASCADE POUR LES NOUVEAUX ÉLÉMENTS ET CLONES
-    // =========================================================================
-    // Décalage courant appliqué à chaque ajout successif
+    // ANTI-REBOND (DEBOUNCE) : Évite d'exécuter RecalculateFlows 5 fois de suite
+    // lorsqu'une machine avec plusieurs câbles est supprimée.
+    private bool _recalculatePending = false;
+
+    // Décalage de position courant appliqué à chaque ajout successif de nouveaux éléments et clones.
     private double _cascadeOffset = 0.0;
 
     // Pas d'incrément à chaque ajout (en pixels)
@@ -678,6 +677,29 @@
 
     // Décalage maximal avant de repartir du centre
     private const double MaxCascadeOffset = 180.0;
+
+
+
+    // =========================================================================
+    // ANTI-REBOND (DEBOUNCE) : Évite d'exécuter RecalculateFlows 5 fois de suite
+    // lorsqu'une machine avec plusieurs câbles est supprimée.
+    // =========================================================================
+    private async Task RequestFlowRecalculationAsync()
+    {
+        // Si un recalcul est déjà planifié pour ce cycle, on ignore les doublons
+        if (_recalculatePending || _isBulkUpdating) return;
+
+        _recalculatePending = true;
+
+        // Attend que Blazor.Diagrams ait fini de supprimer tous les câbles et le nœud
+        await Task.Yield();
+
+        _recalculatePending = false;
+
+        // Exécute le moteur de flux UNE SEULE FOIS
+        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        StateHasChanged();
+    }
 
 
     /// <summary>
@@ -1010,24 +1032,18 @@
             };
         };
 
-        // Recalcul lorsqu'une liaison est supprimée (au clic droit ou touche Suppr)
-        Diagram.Links.Removed += _ => 
+        // Recalcul lorsqu'une liaison est supprimée (regroupé via RequestFlowRecalculationAsync)
+        Diagram.Links.Removed += link =>
         {
-            // Évite les recalculs pendant LoadDiagram
             if (_isBulkUpdating) return;
-
-            FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            InvokeAsync(StateHasChanged);
+            _ = RequestFlowRecalculationAsync();
         };
 
-        // Recalcul lorsqu'une machine ou un stockage est supprimé
-        Diagram.Nodes.Removed += _ => 
+        // Recalcul lorsqu'une machine ou un stockage est supprimé (regroupé via RequestFlowRecalculationAsync)
+        Diagram.Nodes.Removed += node =>
         {
-            // Évite les recalculs pendant LoadDiagram
             if (_isBulkUpdating) return;
-
-            FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            InvokeAsync(StateHasChanged);
+            _ = RequestFlowRecalculationAsync();
         };
 
         // Enregistre le composant personnalisé pour les nœuds de machine

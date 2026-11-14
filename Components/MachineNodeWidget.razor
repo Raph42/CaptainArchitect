@@ -1002,8 +1002,21 @@ Dans Pages/Home.razor
     }
 
 
+    /// <summary>
+    /// Supprime la machine et ses câbles raccordés en ne déclenchant
+    /// qu'un seul recalcul global à la fin.
+    /// </summary>
     private void DeleteNode()
     {
+        if (Diagram == null || Node == null) return;
+
+        // 1. Récupère tous les tuyaux connectés aux ports de cette machine
+        var attachedLinks = Node.Ports
+            .SelectMany(p => p.Links)
+            .Distinct()
+            .ToList();
+
+        // 2. Retire le nœud du diagramme (Blazor.Diagrams retire ses liens en même temps)
         Diagram.Nodes.Remove(Node);
     }
 

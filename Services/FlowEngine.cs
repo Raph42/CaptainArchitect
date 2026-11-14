@@ -152,7 +152,7 @@ public static class FlowEngine
         resourceService.UpdateGlobalStats(totalWorkers, totalPowerKw);
 
         // Rafraîchit le canevas SVG
-        diagram.Refresh();
+        // diagram.Refresh(); // <-- Inutile lors d'un calcul de débit et très coûteux sur une grande usine
 
     }
 
