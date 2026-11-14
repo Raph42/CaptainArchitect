@@ -46,14 +46,14 @@
 
         <!-- 1. ZONE FIXE DU HAUT -->
         <div style="flex-shrink: 0;">
-            
+
             <!-- En-tête : Titre + Bouton de fermeture -->
             <div class="d-flex align-center justify-space-between mb-2">
                 <MudText Typo="Typo.subtitle1" Class="fw-bold" Style="color: #e4e4e7;">Recipe Catalog</MudText>
-                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
-                               Size="MudBlazor.Size.Small" 
-                               Color="Color.Default" 
-                               OnClick="@ToggleDrawer" 
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                               Size="MudBlazor.Size.Small"
+                               Color="Color.Default"
+                               OnClick="@ToggleDrawer"
                                Title="Fermer le panneau" />
             </div>
 
@@ -163,7 +163,7 @@
 
                     <!-- Bandeau horizontal défilant avec les icônes -->
                     <div class="d-flex align-center gap-1 overflow-x-auto pb-1 recent-search-bar">
-                        
+
                         @foreach (var prod in _recentProducts)
                         {
                             <!-- 1. key force Blazor à recréer l'élément sans garder l'état d'erreur du précédent -->
@@ -216,13 +216,13 @@
                 <!-- Rendu personnalisé de chaque ligne dans la liste déroulante -->
                 <ItemTemplate Context="prod">
                     <div class="d-flex align-center gap-2 py-1">
-                        
+
                         <!-- Icône du produit avec gestion d'erreur d'affichage -->
                         <img src="@GetProductImagePath(prod)"
                              alt="@prod.Name"
                              style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;"
                              onerror="this.style.display='none';" />
-                        
+
                         <!-- Libellé du produit -->
                         <MudText Typo="Typo.body2">@prod.Name</MudText>
 
@@ -258,12 +258,12 @@
                 <Virtualize Items="@FilteredRecipes.ToList()" Context="recipe">
                     <MudCard Class="mb-2 recipe-card" Outlined="true">
                         <MudCardContent Class="pa-2">
-                            
+
                             <div class="d-flex justify-space-between align-center">
 
                                 <!-- Titre éclairci avec la classe recipe-title -->
                                 <MudText Typo="Typo.subtitle2" Class="fw-bold recipe-title">@recipe.RecipeId</MudText>
-                                
+
                                 <MudIconButton Icon="@Icons.Material.Filled.AddCircle"
                                                Color="Color.Primary"
                                                Size="MudBlazor.Size.Small"
@@ -273,22 +273,22 @@
 
                             <!-- Entrées & Sorties -->
                             <div class="d-flex align-center gap-1 mt-1">
-                                
+
                                 <!-- Libellé In: avec recipe-in-label -->
                                 <MudText Typo="Typo.caption" Class="recipe-in-label me-1">In:</MudText>
-                                
+
                                 @foreach (var input in recipe.Inputs)
                                 {
                                     @if (!string.IsNullOrWhiteSpace(input.ProductId))
                                     {
-                                        <ResourceBadge @key="@($"{recipe.RecipeId}_in_{input.ProductId}")" 
+                                        <ResourceBadge @key="@($"{recipe.RecipeId}_in_{input.ProductId}")"
                                                        ProductId="@input.ProductId" />
                                     }
                                 }
-                                
+
                                 <!-- Libellé Out: avec recipe-out-label -->
                                 <MudText Typo="Typo.caption" Class="recipe-out-label ms-2 me-1">Out:</MudText>
-                                
+
                                 @foreach (var output in recipe.Outputs)
                                 {
                                     @if (!string.IsNullOrWhiteSpace(output.ProductId))
@@ -318,7 +318,7 @@
     <!-- Zone principale : Diagramme Canvas prenant tout l'espace restant -->
     <div class="flex-grow-1 h-100 position-relative outline-none"
          style="background-color: #1a1a1a;"
-         tabindex="0" 
+         tabindex="0"
          @onkeydown="HandleKeyDown"
          @oncontextmenu:preventDefault="true">
         @if (Diagram != null)
@@ -417,10 +417,10 @@
         border-radius: 6px;
     }
 
-    .drawer-toggle-btn:hover {
-        background: #27272a;
-        color: #38bdf8;
-    }
+        .drawer-toggle-btn:hover {
+            background: #27272a;
+            color: #38bdf8;
+        }
 
     .bg-dark-drawer {
         background-color: #1e1e20 !important;
@@ -439,28 +439,28 @@
         transition: border-color 0.15s ease-in-out;
     }
 
-    /* Survol de la carte */
-    .recipe-card:hover {
-        border-color: #38bdf8 !important; /* Bordure cyan au survol */
-    }
+        /* Survol de la carte */
+        .recipe-card:hover {
+            border-color: #38bdf8 !important; /* Bordure cyan au survol */
+        }
 
-    /* 1. Titre de la recette (blanc cassé très lisible) */
-    .recipe-card .recipe-title {
-        color: #f4f4f5 !important;
-        font-size: 0.85rem;
-    }
+        /* 1. Titre de la recette (blanc cassé très lisible) */
+        .recipe-card .recipe-title {
+            color: #f4f4f5 !important;
+            font-size: 0.85rem;
+        }
 
-    /* 2. Libellé 'In:' des entrées (ambre / orange doux) */
-    .recipe-card .recipe-in-label {
-        color: #fbbf24 !important;
-        font-weight: 600;
-    }
+        /* 2. Libellé 'In:' des entrées (ambre / orange doux) */
+        .recipe-card .recipe-in-label {
+            color: #fbbf24 !important;
+            font-weight: 600;
+        }
 
-    /* 3. Libellé 'Out:' des sorties (cyan / bleu clair) */
-    .recipe-card .recipe-out-label {
-        color: #38bdf8 !important;
-        font-weight: 600;
-    }
+        /* 3. Libellé 'Out:' des sorties (cyan / bleu clair) */
+        .recipe-card .recipe-out-label {
+            color: #38bdf8 !important;
+            font-weight: 600;
+        }
 
     /* Conteneur défilant horizontalement pour les dernières recherches */
     .recent-search-bar {
@@ -468,14 +468,14 @@
         scrollbar-color: #555 transparent;
     }
 
-    .recent-search-bar::-webkit-scrollbar {
-        height: 4px;
-    }
+        .recent-search-bar::-webkit-scrollbar {
+            height: 4px;
+        }
 
-    .recent-search-bar::-webkit-scrollbar-thumb {
-        background-color: #555;
-        border-radius: 4px;
-    }
+        .recent-search-bar::-webkit-scrollbar-thumb {
+            background-color: #555;
+            border-radius: 4px;
+        }
 
     /* Vignette individuelle d'icône d'historique */
     .recent-item-badge {
@@ -493,10 +493,10 @@
         transition: transform 0.1s ease, border-color 0.2s ease;
     }
 
-    .recent-item-badge:hover {
-        border-color: #38bdf8;
-        transform: scale(1.15);
-    }
+        .recent-item-badge:hover {
+            border-color: #38bdf8;
+            transform: scale(1.15);
+        }
 
     .recent-item-icon {
         width: 100%;
@@ -523,17 +523,17 @@
 
     /* Style des courbes de connexion */
     /*.default-link path {
-    /*    stroke: #38bdf8 !important; /* Bleu clair néon */
+        /*    stroke: #38bdf8 !important; /* Bleu clair néon */
     /*    stroke-width: 3px !important;
-    /*}
+        /*}
 
-    /* Effet quand le lien est sélectionné */
+        /* Effet quand le lien est sélectionné */
     /*.default-link.selected path {
-    /*    stroke: #fbbf24 !important; /* Jaune doré */
+        /*    stroke: #fbbf24 !important; /* Jaune doré */
     /*    stroke-width: 4px !important;
-    /*}
+        /*}
 
-    /* Animation ou survol d'un port prêt à être connecté */
+        /* Animation ou survol d'un port prêt à être connecté */
     .diagram-port:hover {
         transform: scale(1.4);
         background: #38bdf8 !important;
@@ -541,16 +541,16 @@
     }
 
     /* Couleur du texte saisi dans la barre de recherche */
-        .search-autocomplete input.mud-input-slot {
+    .search-autocomplete input.mud-input-slot {
         color: #f4f4f5 !important; /* Texte clair et net */
         font-size: 0.875rem;
     }
 
-    /* Couleur du texte indicatif (placeholder) quand le champ est vide */
+        /* Couleur du texte indicatif (placeholder) quand le champ est vide */
         .search-autocomplete input.mud-input-slot::placeholder {
-        color: #a1a1aa !important; /* Gris clair parfaitement lisible */
-        opacity: 1;
-    }
+            color: #a1a1aa !important; /* Gris clair parfaitement lisible */
+            opacity: 1;
+        }
 
     /* Éclaircir également l'icône loupe et la croix d'effacement */
     .search-autocomplete .mud-input-adornment-start .mud-icon-root,
@@ -576,30 +576,30 @@
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6) !important;
     }
 
-    /* 2. Liste interne */
-    .autocomplete-popover-dark .mud-list {
-        background-color: transparent !important;
-        padding: 4px !important;
-    }
+        /* 2. Liste interne */
+        .autocomplete-popover-dark .mud-list {
+            background-color: transparent !important;
+            padding: 4px !important;
+        }
 
-    /* 3. Lignes de produits (Item individuel) */
-    .autocomplete-popover-dark .mud-list-item {
-        color: #f4f4f5 !important; /* Texte clair */
-        border-radius: 4px;
-        transition: background-color 0.15s ease-in-out;
-    }
+        /* 3. Lignes de produits (Item individuel) */
+        .autocomplete-popover-dark .mud-list-item {
+            color: #f4f4f5 !important; /* Texte clair */
+            border-radius: 4px;
+            transition: background-color 0.15s ease-in-out;
+        }
 
-    /* 4. Effet lors du survol de la souris ou de la sélection au clavier */
-    .autocomplete-popover-dark .mud-list-item:hover,
-    .autocomplete-popover-dark .mud-list-item.mud-selected-item {
-        background-color: #38bdf820 !important; /* Légère touche cyan translucide */
-        color: #38bdf8 !important; /* Texte bleu cyan au survol */
-    }
+            /* 4. Effet lors du survol de la souris ou de la sélection au clavier */
+            .autocomplete-popover-dark .mud-list-item:hover,
+            .autocomplete-popover-dark .mud-list-item.mud-selected-item {
+                background-color: #38bdf820 !important; /* Légère touche cyan translucide */
+                color: #38bdf8 !important; /* Texte bleu cyan au survol */
+            }
 
-    /* 5. Message quand rien n'est trouvé */
-    .autocomplete-popover-dark .text-muted {
-        color: #a1a1aa !important;
-    }
+        /* 5. Message quand rien n'est trouvé */
+        .autocomplete-popover-dark .text-muted {
+            color: #a1a1aa !important;
+        }
 
 
     /* OPTIMISATION MATÉRIELLE POUR LE CANVAS ET LES NŒUDS */
@@ -609,16 +609,15 @@
         will-change: transform;
     }
 
-    /* Supprime les calculs d'ombres lourds pendant que l'élément est en cours de déplacement/sélection */
-    .machine-card.selected, .storage-card.selected {
-        box-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important;
-    }
+        /* Supprime les calculs d'ombres lourds pendant que l'élément est en cours de déplacement/sélection */
+        .machine-card.selected, .storage-card.selected {
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important;
+        }
 
     /* Fluidifie le rendu des tracés SVG des câbles */
     .diagram-container svg path {
         shape-rendering: geometricPrecision;
     }
-
 
 </style>
 
@@ -962,10 +961,10 @@
                 // le PathGenerator décide de la manière de dessiner la ligne entre ces points
                 // (courbe, ligne droite ou angles brisés).
                 // StraightPathGenerator : trace des segments droits et nets entre les points calculés, supprimant toute courbure.
-                
-                DefaultPathGenerator = new SmoothPathGenerator(),
 
-                // le Router calcule uniquement les points de passage (les coordonnées $X, Y$), 
+DefaultPathGenerator = new SmoothPathGenerator(),
+
+                // le Router calcule uniquement les points de passage (les coordonnées $X, Y$),
                 // DefaultRouter = new OrthogonalRouter(),
                 // DefaultPathGenerator = new StraightPathGenerator(),
 
@@ -1142,24 +1141,38 @@
             var selectedLinks = Diagram.Links.Where(l => l.Selected).ToList();
             var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
 
-            // Si au moins un tuyau est sélectionné (sans nœud), on affiche la confirmation
-            if (selectedLinks.Count > 0 && selectedNodes.Count == 0)
+            // Si aucun élément n'est sélectionné, on ne fait rien
+            if (selectedLinks.Count == 0 && selectedNodes.Count == 0) return;
+
+            // Construction d'un message adapté à la sélection (machines et/ou tuyaux)
+            string message;
+
+            if (selectedNodes.Count == 1 && selectedLinks.Count == 0)
             {
-                string message = selectedLinks.Count == 1
-                    ? "Do you really want to delete this link ?"
-                    : $"Do you really want to delete this {selectedLinks.Count} links ?";
-
-                // Ouverture de la boîte de dialogue MudBlazor (syntaxe asynchrone v7+)
-                bool? confirm = await DialogService.ShowMessageBoxAsync(
-                    title: "Delete the link",
-                    message: message,
-                    yesText: "Delete",
-                    cancelText: "Cancel"
-                );
-
-                // Si l'utilisateur clique sur "Annuler" ou ferme la fenêtre, on stoppe tout
-                if (confirm != true) return;
+                message = "Delete the item ?";
             }
+            else if (selectedNodes.Count > 1)
+            {
+                message = $"Delete this {selectedNodes.Count} selected items ?";
+            }
+            else
+            {
+                message = selectedLinks.Count == 1
+                    ? "Delete the link ?"
+                    : $"Delete these {selectedLinks.Count} links ?";
+            }
+
+            // Ouverture de la boîte de dialogue MudBlazor (syntaxe asynchrone v7+)
+            bool? confirm = await DialogService.ShowMessageBoxAsync(
+                title: "Delete the link",
+                message: message,
+                yesText: "Delete",
+                cancelText: "Cancel"
+            );
+
+            // Si l'utilisateur clique sur "Annuler" ou ferme la fenêtre, on stoppe tout
+            if (confirm != true) return;
+
 
             // Suppression des liens sélectionnés
             foreach (var link in selectedLinks)
@@ -1174,17 +1187,19 @@
             }
 
             // Recalcul des débits après suppression
-            FlowEngine.RecalculateFlows(Diagram, ResourceService);
+            //FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
         // 2. Duplication par raccourci Ctrl + D
         else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
         {
             var selectedNode = Diagram.Nodes.FirstOrDefault(n => n.Selected);
+
             if (selectedNode != null)
             {
                 await DuplicateNode(selectedNode);
             }
         }
+
     }
 
 
@@ -1396,7 +1411,7 @@
             // Dictionnaire unifié pour mapper les anciens ID vers les nouvelles instances de NodeModel (Machines OU Stockages)
             var allNodesMap = new Dictionary<string, NodeModel>();
 
-			// Variables pour le suivi de l'avancement
+            // Variables pour le suivi de l'avancement
             int totalNodes = saveData.Nodes.Count;
             int totalStorages = saveData.Storages.Count;
             int totalLinks = saveData.Links.Count;
@@ -1410,7 +1425,7 @@
                 var savedNode = saveData.Nodes[i];
                 // Recherche de la recette dans les données chargées
                 var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
-                
+
                 if (recipe != null)
                 {
                     // Instanciation de la machine à sa position d'origine
@@ -1582,7 +1597,7 @@
 
         // 3. Création du nœud
         var storageNode = new StorageNodeModel(productId, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
-        
+
         // 4. Désélectionne les anciens nœuds et ajoute le nouveau stockage
         Diagram.UnselectAll();
         Diagram.Nodes.Add(storageNode);
@@ -1598,9 +1613,9 @@
         storageNode.Refresh();
         Diagram.Refresh();
         FlowEngine.RecalculateFlows(Diagram, ResourceService);
-        
-        
-        
+
+
+
         // Diagram.Nodes.Add(storageNode);
 
         // // 4. Laisse le temps au DOM de rendre StorageNodeWidget et PortRenderer

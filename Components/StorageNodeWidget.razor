@@ -4,6 +4,7 @@
 @using CaptainArchitect.Models
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
+@inject IDialogService DialogService
 @implements IDisposable
 
 <div class="storage-card @(Node.Selected ? "selected" : "")">
@@ -22,14 +23,15 @@
 
             <!-- Bouton Dupliquer le stockage -->
             <button class="btn-duplicate"
-                    title="Dupliquer le stockage (Ctrl+D)"
+                    title="Duplicate storage (Ctrl+D)"
                     @onclick="DuplicateThisNode"
-                    @onclick:stopPropagation="true">
-                ⧉
-            </button>
+                    @onclick:stopPropagation="true">⧉</button>
 
             <!-- Croix rouge immédiatement à sa droite Bouton supprimer -->
-            <button class="btn-delete" title="Supprimer le stockage" @onclick="DeleteNode">✕</button>
+            <button class="btn-delete" 
+                    title="Delete storage"
+                    @onclick="DeleteNode"
+                    @onclick:stopPropagation="true">✕</button>
         </div>
 
     </div>
@@ -321,11 +323,29 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private void DeleteNode()
+
+    /// <summary>
+    /// Affiche une fenêtre de confirmation avant de supprimer le stockage.
+    /// </summary>
+    private async Task DeleteNode()
     {
-        Diagram.Nodes.Remove(Node);
-        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        if (Diagram == null || Node == null) return;
+
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            title: "Delete the storage",
+            message: $"Delete the storage « {ProductDisplayName} » and its pipes ?",
+            yesText: "Delete",
+            cancelText: "Cancel"
+        );
+
+        if (confirm == true)
+        {
+            Diagram.Nodes.Remove(Node);
+            //FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        }
+
     }
+
 
     public void Dispose()
     {

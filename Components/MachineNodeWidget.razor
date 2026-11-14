@@ -13,6 +13,7 @@ Dans Pages/Home.razor
 @using CaptainArchitect.Models
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
+@inject IDialogService DialogService
 
 
 <div class="machine-card @(Node.Selected ? "selected" : "") @(Node.IsPaused ? "is-paused" : "")"
@@ -87,13 +88,17 @@ Dans Pages/Home.razor
 
             <!-- 4. Bouton Dupliquer la machine -->
             <button class="btn-duplicate" 
-                    title="Dupliquer la machine (Ctrl+D)" 
+                    title="Duplicate the machine (Ctrl+D)" 
                     @onclick="DuplicateThisNode"
                     @onclick:stopPropagation="true">⧉</button>
 
 
-            <!-- 3. Croix rouge immédiatement à sa droite Bouton supprimer -->
-            <button class="btn-delete" title="Delete the machine" @onclick="DeleteNode">✕</button>
+            <!-- 3. Croix rouge : stopPropagation empêche le nœud d'intercepter le clic -->
+            <button class="btn-delete" 
+                    title="Delete the machine" 
+                    @onclick="DeleteNode" 
+                    @onclick:stopPropagation="true">✕</button>
+
         </div>
     </div>
 
@@ -1003,22 +1008,40 @@ Dans Pages/Home.razor
 
 
     /// <summary>
-    /// Supprime la machine et ses câbles raccordés en ne déclenchant
-    /// qu'un seul recalcul global à la fin.
+    /// Affiche une fenêtre de confirmation MudBlazor avant de supprimer la machine
+    /// et ses câbles raccordés du diagramme.
     /// </summary>
-    private void DeleteNode()
+    private async Task DeleteNode()
     {
+        // Sécurité : vérifie que le diagramme et le nœud sont bien initialisés
         if (Diagram == null || Node == null) return;
 
-        // 1. Récupère tous les tuyaux connectés aux ports de cette machine
-        var attachedLinks = Node.Ports
-            .SelectMany(p => p.Links)
-            .Distinct()
-            .ToList();
+        // Ouvre la boîte de dialogue de confirmation MudBlazor (syntaxe asynchrone v7+)
+        // On affiche le nom exact de la machine (ex: "Blast furnace II") pour plus de clarté
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            title: "Delete the machine",
+            //message: $"Do you want to delete the machine « {MachineDisplayName} » as well as its connections ?",
+            message: $"Do you want to delete the machine ?",
+            yesText: "Delete",
+            cancelText: "Cancel"
+        );
 
-        // 2. Retire le nœud du diagramme (Blazor.Diagrams retire ses liens en même temps)
-        Diagram.Nodes.Remove(Node);
+        // Si l'utilisateur clique sur "Supprimer" (confirm == true), on retire la machine
+        // (Blazor.Diagrams retirera automatiquement tous les tuyaux connectés à cette machine)
+        if (confirm == true)
+        {
+            // 1. Récupère tous les tuyaux connectés aux ports de cette machine
+            var attachedLinks = Node.Ports
+                .SelectMany(p => p.Links)
+                .Distinct()
+                .ToList();
+
+            // 2. Retire le nœud du diagramme (Blazor.Diagrams retire ses liens en même temps)
+            Diagram.Nodes.Remove(Node);
+
+        }
     }
+
 
 
     private void OnRightClick()
