@@ -10,10 +10,10 @@
 @implements IDisposable
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Options
-@using Blazor.Diagrams.Core.Anchors;
-@using Blazor.Diagrams.Core.Behaviors;
-@using Blazor.Diagrams.Core.Models;
-@using Blazor.Diagrams.Core.Models.Base;
+@using Blazor.Diagrams.Core.Anchors
+@using Blazor.Diagrams.Core.Behaviors
+@using Blazor.Diagrams.Core.Models
+@using Blazor.Diagrams.Core.Models.Base
 @using Blazor.Diagrams.Core.Geometry
 @using Blazor.Diagrams.Components
 
@@ -23,7 +23,9 @@
 
 
 <!-- Conteneur plein écran sombre sans marge ni débordement -->
-<div class="d-flex w-100 h-100 position-relative" style="background-color: #1e1e1e; overflow: hidden;">
+<!-- Conteneur principal décalé de 48px pour ne pas passer sous MudAppBar -->
+<div class="d-flex w-100 position-relative"
+     style="height: calc(100vh - 48px); margin-top: 48px; background-color: #1e1e1e; overflow: hidden;">
 
     <!-- Bouton flottant pour ouvrir le tiroir si replié -->
     @if (!_drawerOpen)
@@ -44,7 +46,7 @@
                Class="pa-3 bg-dark-drawer d-flex flex-column h-100"
                Style="border-right: 1px solid #333; z-index: 200;">
 
-        <!-- 1. ZONE FIXE DU HAUT -->
+        <!-- 1. ZONE FIXE DU HAUT DU TIROIR -->
         <div style="flex-shrink: 0;">
 
             <!-- En-tête : Titre + Bouton de fermeture -->
@@ -56,9 +58,6 @@
                                OnClick="@ToggleDrawer"
                                Title="Fermer le panneau" />
             </div>
-
-
-
 
             <!-- Barre d'outils Fichier compacte et harmonisée -->
             <div class="toolbar-box mb-3 d-flex align-center justify-space-between px-2 py-1">
@@ -86,7 +85,7 @@
                     Load
                 </MudButton>
 
-                <!-- 3. Bouton Vider -->
+                <!-- 3. Bouton Vider l'onglet actif -->
                 <MudButton Variant="Variant.Text"
                            Color="Color.Error"
                            StartIcon="@Icons.Material.Filled.DeleteSweep"
@@ -96,10 +95,7 @@
                     Clear
                 </MudButton>
 
-
             </div>
-
-
 
             <!-- Menu pour ajouter un stockage avec filtre de recherche intégré -->
             <MudMenu Label="Add Storage"
@@ -108,7 +104,8 @@
                      Color="Color.Info"
                      Size="MudBlazor.Size.Small"
                      Dense="true"
-                     MaxHeight="350">
+                     MaxHeight="350"
+                     Class="mb-2">
 
                 <!-- 1. Champ de recherche épinglé en haut du menu -->
                 <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
@@ -147,10 +144,6 @@
                 }
             </MudMenu>
 
-
-
-
-
             <!-- HISTORIQUE DES DERNIÈRES RECHERCHES -->
             @if (_recentProducts.Count > 0)
             {
@@ -161,9 +154,9 @@
                         Search history :
                     </MudText>
 
-                    <!-- Bandeau horizontal défilant avec les icônes -->
+                    <!-- Bandeau horizontal défilant avec les icônes (sans JS inline 'this') -->
                     <div class="d-flex align-center gap-1 overflow-x-auto pb-1 recent-search-bar">
-
+                        
                         @foreach (var prod in _recentProducts)
                         {
                             <!-- 1. key force Blazor à recréer l'élément sans garder l'état d'erreur du précédent -->
@@ -172,17 +165,20 @@
                                  @onclick="@(() => SelectRecentProduct(prod))"
                                  title="@prod.Name">
 
-                                <!-- 2. Image avec onload pour réinitialiser le display et repli vers la lettre/texte -->
-                                <img src="@GetProductImagePath(prod)"
-                                     alt="@prod.Name"
-                                     class="recent-item-icon"
-                                     onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';"
-                                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-
-                                <!-- 3. Repli : affiche les 2-3 lettres si l'image est introuvable -->
-                                <span class="recent-item-fallback" style="display: none;">
-                                    @GetShortFallbackName(prod)
-                                </span>
+                                @if (!_failedRecentImages.Contains(prod.Id))
+                                {
+                                    <img src="@GetProductImagePath(prod)"
+                                         alt="@prod.Name"
+                                         class="recent-item-icon"
+                                         @onerror="@(() => MarkRecentImageFailed(prod.Id))" />
+                                }
+                                else
+                                {
+                                    <!-- Repli : affiche les 2-3 lettres si l'image est introuvable -->
+                                    <span class="recent-item-fallback">
+                                        @GetShortFallbackName(prod)
+                                    </span>
+                                }
 
                             </div>
                         }
@@ -190,8 +186,7 @@
                 </div>
             }
 
-            <!-- Barre de recherche -->
-            <!-- Sélecteur / Barre de recherche avec autocomplétion des produits -->
+            <!-- Barre de recherche avec autocomplétion des produits -->
             <MudAutocomplete T="Product"
                              Placeholder="Find a product..."
                              SearchFunc="@SearchProducts"
@@ -208,6 +203,7 @@
                              Adornment="Adornment.Start"
                              AdornmentIcon="@Icons.Material.Filled.Search"
                              MaxItems="300"
+                             MaxHeight="300"
                              SelectValueOnTab="false"
                              @onkeyup="HandleSearchKeyDown"
                              Class="mb-2 search-autocomplete"
@@ -217,11 +213,13 @@
                 <ItemTemplate Context="prod">
                     <div class="d-flex align-center gap-2 py-1">
 
-                        <!-- Icône du produit avec gestion d'erreur d'affichage -->
-                        <img src="@GetProductImagePath(prod)"
-                             alt="@prod.Name"
-                             style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;"
-                             onerror="this.style.display='none';" />
+                        @if (!_failedRecentImages.Contains(prod.Id))
+                        {
+                            <img src="@GetProductImagePath(prod)"
+                                 alt="@prod.Name"
+                                 style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;"
+                                 @onerror="@(() => MarkRecentImageFailed(prod.Id))" />
+                        }
 
                         <!-- Libellé du produit -->
                         <MudText Typo="Typo.body2">@prod.Name</MudText>
@@ -251,7 +249,7 @@
 
         </div>
 
-        <!-- 2. ZONE SCROLLABLE DE LA LISTE -->
+        <!-- 2. ZONE SCROLLABLE DE LA LISTE DES RECETTES -->
         <div class="recipes-list flex-grow-1" style="overflow-y: auto; min-height: 0;">
             @if (FilteredRecipes != null)
             {
@@ -297,79 +295,261 @@
                                                        ProductId="@output.ProductId" />
                                     }
                                 }
-
                             </div>
                         </MudCardContent>
                     </MudCard>
                 </Virtualize>
             }
-
             else
-
             {
                 <MudProgressCircular Indeterminate="true" Size="MudBlazor.Size.Small" />
             }
-
         </div>
 
     </MudDrawer>
 
 
-    <!-- Zone principale : Diagramme Canvas prenant tout l'espace restant -->
-    <div class="flex-grow-1 h-100 position-relative outline-none"
-         style="background-color: #1a1a1a;"
+    <!-- =========================================================================
+         ZONE PRINCIPALE À DROITE : BARRE D'ONGLETS EN HAUT + CANVAS EN DESSOUS
+         ========================================================================= -->
+    <div class="flex-grow-1 h-100 d-flex flex-column position-relative outline-none"
+         style="background-color: #1a1a1a; min-width: 0; min-height: 0;"
          tabindex="0"
          @onkeydown="HandleKeyDown"
          @oncontextmenu:preventDefault="true">
-        @if (Diagram != null)
-        {
-            <CascadingValue Value="Diagram">
-                <DiagramCanvas Class="diagram-container">
 
-                </DiagramCanvas>
-            </CascadingValue>
-        }
+        <!-- 1. BARRE D'ONGLETS D'USINE + PORTAILS INTER-ONGLETS (BUS) -->
+        <!-- Décalée de 348px quand le tiroir est ouvert (340px) ou 54px quand il est fermé -->
+        <div class="factory-tabs-bar d-flex align-center justify-space-between px-2 py-1"
+             style="@(_drawerOpen ? "padding-left: 348px !important;" : "padding-left: 54px !important;")">
 
-        <!-- Overlay d'avancement du chargement de la sauvegarde -->
-        <MudOverlay Visible="@_isLoadingDiagram"
-                    DarkBackground="true"
-                    Absolute="true"
-                    ZIndex="1000">
-            <div class="d-flex flex-column align-center justify-center pa-6 rounded-lg"
-                 style="background: #27272a; border: 1px solid #3f3f46; min-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.6);">
+            <!-- Liste horizontale des onglets -->
+            <div class="d-flex align-center gap-1 flex-wrap" style="min-width: 0;">
+                @foreach (var tab in Tabs)
+                {
+                    bool isActive = tab.Id == ActiveTab?.Id;
+                    <div @key="tab.Id"
+                         class="factory-tab-chip @(isActive ? "active" : "")"
+                         @onclick="@(() => SelectTab(tab.Id))">
 
-                <MudProgressCircular Color="Color.Info"
-                                     Size="MudBlazor.Size.Large"
-                                     Indeterminate="@(_loadingProgress == 0)"
-                                     Value="@_loadingProgress"
-                                     Class="mb-4" />
+                        <span class="tab-name">@tab.Name</span>
 
-                <MudText Typo="Typo.h6" Class="mb-1" Style="color: #38bdf8; font-weight: 600;">
-                    Loading the factory...
-                </MudText>
+                        <!-- Bouton renommer l'onglet -->
+                        <button type="button"
+                                class="tab-action-btn edit"
+                                title="Renommer l'onglet"
+                                @onclick="@(() => RenameTab(tab))"
+                                @onclick:stopPropagation="true">
+                            ✎
+                        </button>
 
-                <MudText Typo="Typo.body2" Class="mb-3 text-secondary" Style="color: #a1a1aa;">
-                    @_loadingStatusText
-                </MudText>
+                        <!-- Bouton supprimer l'onglet (affiché s'il y a au moins 2 onglets) -->
+                        @if (Tabs.Count > 1)
+                        {
+                            <button type="button"
+                                    class="tab-action-btn close"
+                                    title="Supprimer l'onglet"
+                                    @onclick="@(() => RemoveTab(tab))"
+                                    @onclick:stopPropagation="true">
+                                ✕
+                            </button>
+                        }
+                    </div>
+                }
 
-                <MudProgressLinear Color="Color.Info"
-                                   Value="@_loadingProgress"
-                                   Rounded="true"
-                                   Size="MudBlazor.Size.Medium"
-                                   Style="width: 100%; height: 8px;" />
-
-                <MudText Typo="Typo.caption" Class="mt-2" Style="color: #71717a;">
-                    @($"{_loadingProgress}%")
-                </MudText>
+                <!-- Bouton Ajouter un nouvel onglet -->
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Info"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           Size="MudBlazor.Size.Small"
+                           Class="tool-btn"
+                           OnClick="AddNewTab">
+                    Onglet
+                </MudButton>
             </div>
-        </MudOverlay>
 
+            <!-- Boutons Portails Bus (Export / Import entre onglets) -->
+            <div class="d-flex align-center gap-2" style="flex-shrink: 0;">
+
+                <!-- Menu Poser un Portail EXPORT -->
+                <MudMenu Label="Export Bus"
+                         StartIcon="@Icons.Material.Filled.Output"
+                         Variant="Variant.Outlined"
+                         Color="Color.Secondary"
+                         Size="MudBlazor.Size.Small"
+                         Dense="true"
+                         MaxHeight="350">
+                    <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
+                        <MudTextField @bind-Value="_portalFilterText"
+                                      Placeholder="Filtrer ressource..."
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Immediate="true"
+                                      Clearable="true"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search" />
+                    </div>
+                    <MudDivider Class="my-1" />
+                    @foreach (var prod in FilteredPortalProducts)
+                    {
+                        <MudMenuItem OnClick="@(() => AddExportPortalNode(prod.Id))">
+                            <div class="d-flex align-center gap-2">
+                                <ResourceBadge ProductId="@prod.Id" />
+                                <span>@prod.Name</span>
+                            </div>
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+
+                <!-- Menu Poser un Portail IMPORT -->
+                <MudMenu Label="Import Bus"
+                         StartIcon="@Icons.Material.Filled.Input"
+                         Variant="Variant.Filled"
+                         Color="Color.Info"
+                         Size="MudBlazor.Size.Small"
+                         Dense="true"
+                         MaxHeight="350">
+                    @{
+                        var allExports = GetAllExportPortals().ToList();
+                    }
+                    @if (allExports.Count == 0)
+                    {
+                        <MudMenuItem Disabled="true">Aucun Export créé dans les onglets</MudMenuItem>
+                    }
+                    else
+                    {
+                        @foreach (var item in allExports)
+                        {
+                            <MudMenuItem OnClick="@(() => AddImportPortalNode(item.Portal))">
+                                <div class="d-flex align-center gap-2">
+                                    <ResourceBadge ProductId="@item.Portal.ProductId" />
+                                    <span><strong>[@item.TabName]</strong> @item.Portal.ChannelName (@item.Portal.TotalInputRate.ToString("0.#")/m)</span>
+                                </div>
+                            </MudMenuItem>
+                        }
+                    }
+                </MudMenu>
+
+            </div>
+        </div>
+
+        <!-- 2. ZONE DU CANVAS DE L'ONGLET ACTIF -->
+        <div class="flex-grow-1 w-100 position-relative" style="min-height: 0; overflow: hidden;">
+            @if (Diagram != null)
+            {
+                <CascadingValue Value="Diagram">
+                    <CascadingValue Name="AllFactoryTabs" Value="Tabs">
+                        <CascadingValue Name="SelectTabCallback" Value="EventCallback.Factory.Create<string>(this, SelectTab)">
+                            <!-- @key force Blazor à remonter proprement le canvas lors d'un changement d'onglet -->
+                            <DiagramCanvas @key="ActiveTab.Id" Class="diagram-container" />
+                        </CascadingValue>
+                    </CascadingValue>
+                </CascadingValue>
+            }
+
+            <!-- Overlay d'avancement du chargement de la sauvegarde -->
+            <MudOverlay Visible="@_isLoadingDiagram"
+                        DarkBackground="true"
+                        Absolute="true"
+                        ZIndex="1000">
+                <div class="d-flex flex-column align-center justify-center pa-6 rounded-lg"
+                     style="background: #27272a; border: 1px solid #3f3f46; min-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.6);">
+
+                    <MudProgressCircular Color="Color.Info"
+                                         Size="MudBlazor.Size.Large"
+                                         Indeterminate="@(_loadingProgress == 0)"
+                                         Value="@_loadingProgress"
+                                         Class="mb-4" />
+
+                    <MudText Typo="Typo.h6" Class="mb-1" Style="color: #38bdf8; font-weight: 600;">
+                        Loading the factory...
+                    </MudText>
+
+                    <MudText Typo="Typo.body2" Class="mb-3 text-secondary" Style="color: #a1a1aa;">
+                        @_loadingStatusText
+                    </MudText>
+
+                    <MudProgressLinear Color="Color.Info"
+                                       Value="@_loadingProgress"
+                                       Rounded="true"
+                                       Size="MudBlazor.Size.Medium"
+                                       Style="width: 100%; height: 8px;" />
+
+                    <MudText Typo="Typo.caption" Class="mt-2" Style="color: #71717a;">
+                        @($"{_loadingProgress}%")
+                    </MudText>
+                </div>
+            </MudOverlay>
+        </div>
 
     </div>
 </div>
 
 
 <style>
+    /* Barre supérieure des onglets d'usine */
+    .factory-tabs-bar {
+        background: #141418;
+        border-bottom: 1px solid #333;
+        min-height: 40px;
+        flex-shrink: 0;
+        z-index: 50;
+    }
+
+    .factory-tab-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        background: #1e1e22;
+        border: 1px solid #3f3f46;
+        color: #a1a1aa;
+        font-size: 0.80rem;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.15s ease;
+    }
+
+        .factory-tab-chip:hover {
+            border-color: #71717a;
+            color: #f4f4f5;
+        }
+
+        .factory-tab-chip.active {
+            background: #27272a;
+            border-color: #38bdf8;
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+        }
+
+    .tab-action-btn {
+        background: transparent;
+        border: none;
+        font-size: 0.72rem;
+        cursor: pointer;
+        padding: 0 2px;
+        line-height: 1;
+        border-radius: 3px;
+    }
+
+        .tab-action-btn.edit {
+            color: #a1a1aa;
+        }
+
+            .tab-action-btn.edit:hover {
+                color: #38bdf8;
+            }
+
+        .tab-action-btn.close {
+            color: #ef4444;
+        }
+
+            .tab-action-btn.close:hover {
+                background: rgba(239, 68, 68, 0.2);
+            }
+
     /* Conteneur sombre des boutons d'action */
     .toolbar-box {
         background: #18181b;
@@ -384,11 +564,6 @@
         padding: 3px 8px !important;
         height: 28px !important;
         min-height: 28px !important;
-    }
-
-    /* Neutralise les styles parasites générés par MudFileUpload */
-    .file-upload-compact .mud-button-root {
-        margin: 0 !important;
     }
 
     /* Style du groupe Tout / Entrées / Sorties */
@@ -408,13 +583,15 @@
 
     .drawer-toggle-btn {
         position: absolute;
-        top: 12px;
-        left: 12px;
+        top: 4px;
+        left: 8px;
         z-index: 100;
-        background: rgba(24, 24, 27, 0.85);
+        background: rgba(24, 24, 27, 0.9);
         color: #e4e4e7;
         border: 1px solid #3f3f46;
         border-radius: 6px;
+        width: 32px;
+        height: 32px;
     }
 
         .drawer-toggle-btn:hover {
@@ -441,7 +618,7 @@
 
         /* Survol de la carte */
         .recipe-card:hover {
-            border-color: #38bdf8 !important; /* Bordure cyan au survol */
+            border-color: #38bdf8 !important;
         }
 
         /* 1. Titre de la recette (blanc cassé très lisible) */
@@ -521,19 +698,7 @@
         text-transform: uppercase;
     }
 
-    /* Style des courbes de connexion */
-    /*.default-link path {
-        /*    stroke: #38bdf8 !important; /* Bleu clair néon */
-    /*    stroke-width: 3px !important;
-        /*}
-
-        /* Effet quand le lien est sélectionné */
-    /*.default-link.selected path {
-        /*    stroke: #fbbf24 !important; /* Jaune doré */
-    /*    stroke-width: 4px !important;
-        /*}
-
-        /* Animation ou survol d'un port prêt à être connecté */
+    /* Animation ou survol d'un port prêt à être connecté */
     .diagram-port:hover {
         transform: scale(1.4);
         background: #38bdf8 !important;
@@ -542,13 +707,13 @@
 
     /* Couleur du texte saisi dans la barre de recherche */
     .search-autocomplete input.mud-input-slot {
-        color: #f4f4f5 !important; /* Texte clair et net */
+        color: #f4f4f5 !important;
         font-size: 0.875rem;
     }
 
         /* Couleur du texte indicatif (placeholder) quand le champ est vide */
         .search-autocomplete input.mud-input-slot::placeholder {
-            color: #a1a1aa !important; /* Gris clair parfaitement lisible */
+            color: #a1a1aa !important;
             opacity: 1;
         }
 
@@ -566,25 +731,41 @@
     /* Bordure plus lumineuse lors du survol ou du focus */
     .search-autocomplete:hover .mud-input-outlined-border,
     .search-autocomplete.mud-input-focused .mud-input-outlined-border {
-        border-color: #38bdf8 !important; /* Teinte bleue cyan */
+        border-color: #38bdf8 !important;
     }
 
-    /* 1. Fenêtre déroulante complète (Popover) */
+    /* 1. Fenêtre déroulante complète (Popover) avec hauteur limitée et ascenseur actif */
     .autocomplete-popover-dark {
         background-color: #242424 !important; /* Même fond sombre que le panneau */
         border: 1px solid #3f3f46 !important; /* Bordure discrète */
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6) !important;
+        max-height: 300px !important; /* Force le plafonnement de la hauteur */
+        overflow-y: auto !important; /* Active le défilement vertical à la molette et à la souris */
+        scrollbar-width: thin;
+        scrollbar-color: #52525b #1e1e22;
     }
+
+        /* Style de la barre de défilement sur Chrome / Edge */
+        .autocomplete-popover-dark::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .autocomplete-popover-dark::-webkit-scrollbar-thumb {
+            background-color: #52525b;
+            border-radius: 4px;
+        }
 
         /* 2. Liste interne */
         .autocomplete-popover-dark .mud-list {
             background-color: transparent !important;
             padding: 4px !important;
+            max-height: none !important; /* Laisse le conteneur parent gérer seul l'ascenseur */
+            overflow: visible !important;
         }
 
         /* 3. Lignes de produits (Item individuel) */
         .autocomplete-popover-dark .mud-list-item {
-            color: #f4f4f5 !important; /* Texte clair */
+            color: #f4f4f5 !important;
             border-radius: 4px;
             transition: background-color 0.15s ease-in-out;
         }
@@ -592,8 +773,8 @@
             /* 4. Effet lors du survol de la souris ou de la sélection au clavier */
             .autocomplete-popover-dark .mud-list-item:hover,
             .autocomplete-popover-dark .mud-list-item.mud-selected-item {
-                background-color: #38bdf820 !important; /* Légère touche cyan translucide */
-                color: #38bdf8 !important; /* Texte bleu cyan au survol */
+                background-color: #38bdf820 !important;
+                color: #38bdf8 !important;
             }
 
         /* 5. Message quand rien n'est trouvé */
@@ -601,9 +782,8 @@
             color: #a1a1aa !important;
         }
 
-
     /* OPTIMISATION MATÉRIELLE POUR LE CANVAS ET LES NŒUDS */
-    .machine-card, .storage-card {
+    .machine-card, .storage-card, .portal-card {
         /* Isole le recalcul géométrique à la carte sans forcer le recalcul de toute la page */
         contain: layout style;
         will-change: transform;
@@ -631,7 +811,16 @@
         Output  // Seulement si présent en sortie
     }
 
-    private BlazorDiagram Diagram { get; set; } = default!;
+    // =========================================================================
+    // GESTION DES ONGLETS D'USINE
+    // =========================================================================
+    private List<FactoryTab> Tabs { get; set; } = new();
+    private FactoryTab ActiveTab { get; set; } = default!;
+
+    // Propriété raccourci pointant vers le BlazorDiagram de l'onglet actif
+    // Utilise l'opérateur ?. pour renvoyer null sans planter tant que ActiveTab n'est pas prêt
+    private BlazorDiagram? Diagram => ActiveTab?.Diagram;
+
     private List<Recipe>? Recipes { get; set; }
 
     // Renommé pour éviter le conflit avec le namespace .NET "Resources"
@@ -641,10 +830,9 @@
 
     // Variable contenant le texte effectif qui filtre la liste des recettes
     private string _searchQuery = "";
+
     // Mémorise le texte tapé au fur et à mesure sans déclencher le re-filtrage lourd des recettes
     private string _currentSearchText = "";
-
-    private double _spawnOffset = 150;
 
     // Stocke la liste brute de tous les produits pour alimenter la recherche
     private List<Product> _allProducts = new();
@@ -652,11 +840,12 @@
 
     private ResourceFilterMode _filterMode = ResourceFilterMode.All;
 
-    // Variables d'historique
+    // Historique des recherches + mémorisation des images introuvables (sans JS inline)
     private readonly List<Product> _recentProducts = new();
+    private readonly HashSet<string> _failedRecentImages = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxRecentSearches = 10;
 
-    // Variables pour l'état d'avancement du chargement
+    // État de chargement d'une sauvegarde
     private bool _isLoadingDiagram = false;
     private int _loadingProgress = 0;
     private string _loadingStatusText = "";
@@ -668,15 +857,29 @@
     // lorsqu'une machine avec plusieurs câbles est supprimée.
     private bool _recalculatePending = false;
 
-    // Décalage de position courant appliqué à chaque ajout successif de nouveaux éléments et clones.
+    // Décalage en cascade lors de l'ajout successif de nœuds
     private double _cascadeOffset = 0.0;
-
     // Pas d'incrément à chaque ajout (en pixels)
     private const double CascadeStep = 30.0;
-
     // Décalage maximal avant de repartir du centre
     private const double MaxCascadeOffset = 180.0;
 
+    // Filtres des menus Storage et Export Bus
+    private string _storageFilterText = "";
+    private string _portalFilterText = "";
+
+
+
+    // =========================================================================
+    // MÉTHODES D'AIDE POUR L'HISTORIQUE DES RECHERCHES
+    // =========================================================================
+    private void MarkRecentImageFailed(string productId)
+    {
+        if (!string.IsNullOrWhiteSpace(productId))
+        {
+            _failedRecentImages.Add(productId);
+        }
+    }
 
 
     // =========================================================================
@@ -696,7 +899,7 @@
         _recalculatePending = false;
 
         // Exécute le moteur de flux UNE SEULE FOIS
-        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
         StateHasChanged();
     }
 
@@ -717,9 +920,6 @@
     }
 
 
-    // Texte saisi dans le filtre du menu "Add Storage"
-    private string _storageFilterText = "";
-
     // Liste filtrée des produits disponibles pour le stockage
     private IEnumerable<Product> FilteredStorageProducts =>
         string.IsNullOrWhiteSpace(_storageFilterText)
@@ -727,6 +927,15 @@
             : ProductDict.Values
                 .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)) ||
                             (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(p => p.Name);
+
+	// Liste filtrée des produits disponibles pour le portail
+    private IEnumerable<Product> FilteredPortalProducts =>
+        string.IsNullOrWhiteSpace(_portalFilterText)
+            ? ProductDict.Values.OrderBy(p => p.Name)
+            : ProductDict.Values
+                .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(_portalFilterText.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(_portalFilterText.Trim(), StringComparison.OrdinalIgnoreCase)))
                 .OrderBy(p => p.Name);
 
     // Propriété de filtrage des recettes
@@ -758,7 +967,6 @@
                 }
             };
 
-
             // 3. Vérification sur les entrées et les sorties
             bool matchesInput = r.Inputs.Any(i => matchesCriteria(i.ProductId));
             bool matchesOutput = r.Outputs.Any(o => matchesCriteria(o.ProductId));
@@ -776,7 +984,6 @@
             };
 
         });
-
 
 
     // 1. Fonction appelée à chaque frappe pour filtrer le menu déroulant de l'autocomplétion
@@ -800,9 +1007,7 @@
             .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
                         (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(term, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(p => p.Name);
-
     }
-
 
 
     // 2. Déclenché UNIQUEMENT quand vous cliquez sur un produit dans le menu déroulant
@@ -817,9 +1022,7 @@
         {
             AddToRecentSearches(selected);
         }
-
     }
-
 
 
     // 3. Gère la validation par la touche Entrée dans la barre de recherche
@@ -838,7 +1041,6 @@
             StateHasChanged();
         }
     }
-
 
 
     // 4. Clic sur une ressource posée sur le diagramme
@@ -881,7 +1083,6 @@
     }
 
 
-
     // Calcule le chemin de l'image en nettoyant le slash initial éventuel
     private string GetProductImagePath(Product? prod)
     {
@@ -895,8 +1096,7 @@
     }
 
 
-
-    /// Calcule un texte court de secours (3 caractères max) si le produit n'a pas d'image
+    // Calcule un texte court de secours (3 caractères max) si le produit n'a pas d'image
     private string GetShortFallbackName(Product? prod)
     {
         if (prod == null) return string.Empty;
@@ -905,44 +1105,11 @@
     }
 
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>
+    /// Crée et configure une nouvelle instance de BlazorDiagram pour un onglet.
+    /// </summary>
+    private BlazorDiagram CreateConfiguredDiagram()
     {
-        // 1. Chargement des données globales
-        try
-        {
-            // Chargement du fichier unique
-            var data = await Http.GetFromJsonAsync<CoiData>("data/captain_of_industry_data.json");
-
-            // Enregistrement des versions du JSON et du jeu dans le service
-            ResourceService.SetVersions(data.Generator, data.GameVersion);
-
-            if (data != null)
-            {
-                if (data.Products != null)
-                {
-                    // Conserve la liste complète pour la barre de recherche
-                    _allProducts = data.Products;
-
-                    ProductDict = data.Products.ToDictionary(p => p.Id, p => p);
-                    ResourceService.LoadProducts(data.Products);
-                }
-
-                if (data.Machines != null)
-                {
-                    ResourceService.LoadMachines(data.Machines);
-                }
-
-                Recipes = data.Recipes;
-
-                // Force le re-rendu du tiroir avec les données prêtes
-                StateHasChanged();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Erreur : {ex.Message}");
-        }
-
         // 2. Options et création de lien avec couleur globale
         var options = new BlazorDiagramOptions
         {
@@ -961,13 +1128,11 @@
                 // le PathGenerator décide de la manière de dessiner la ligne entre ces points
                 // (courbe, ligne droite ou angles brisés).
                 // StraightPathGenerator : trace des segments droits et nets entre les points calculés, supprimant toute courbure.
-
-DefaultPathGenerator = new SmoothPathGenerator(),
+                DefaultPathGenerator = new SmoothPathGenerator(),
 
                 // le Router calcule uniquement les points de passage (les coordonnées $X, Y$),
                 // DefaultRouter = new OrthogonalRouter(),
                 // DefaultPathGenerator = new StraightPathGenerator(),
-
                 EnableSnapping = true,
 
                 // =========================================================================
@@ -975,7 +1140,6 @@ DefaultPathGenerator = new SmoothPathGenerator(),
                 // =========================================================================
                 // Autorise l'ajout et le déplacement de points intermédiaires
                 RequireTarget = true,
-
 
                 // Utilise notre modèle personnalisé lorsqu'un lien est tiré depuis un port
                 Factory = (diagram, source, position) =>
@@ -1000,24 +1164,23 @@ DefaultPathGenerator = new SmoothPathGenerator(),
 
                     return link;
                 }
-
             }
         };
 
-        Diagram = new BlazorDiagram(options);
+        var diag = new BlazorDiagram(options);
 
         // =========================================================================
         // DÉSACTIVATION DE LA SUPPRESSION NATIVES SUR LA TOUCHE "DELETE"
         // Empêche Blazor.Diagrams de supprimer les liens tout seul sans passer par
         // notre méthode HandleKeyDown (et donc sans afficher la confirmation).
         // =========================================================================
-        Diagram.UnregisterBehavior<KeyboardShortcutsBehavior>();
+        diag.UnregisterBehavior<KeyboardShortcutsBehavior>();
 
         // =========================================================================
         // ABONNEMENTS OPTIMISÉS : Recalcul UNIQUEMENT lors des vraies modifications
         // (Suppression de link.Changed pour éviter les 60 recalculs/sec pendant le drag)
         // =========================================================================
-        Diagram.Links.Added += link =>
+        diag.Links.Added += link =>
         {
             // Recalcul quand le lien s'accroche définitivement sur le port cible
             // (hors chargement de fichier)
@@ -1026,40 +1189,92 @@ DefaultPathGenerator = new SmoothPathGenerator(),
                 // Évite les recalculs pendant LoadDiagram
                 if (_isBulkUpdating) return;
 
-                FlowEngine.RecalculateFlows(Diagram, ResourceService);
+                FlowEngine.RecalculateFlows(Tabs, ResourceService);
                 InvokeAsync(StateHasChanged);
             };
         };
 
         // Recalcul lorsqu'une liaison est supprimée (regroupé via RequestFlowRecalculationAsync)
-        Diagram.Links.Removed += link =>
+        diag.Links.Removed += link =>
         {
             if (_isBulkUpdating) return;
             _ = RequestFlowRecalculationAsync();
         };
 
         // Recalcul lorsqu'une machine ou un stockage est supprimé (regroupé via RequestFlowRecalculationAsync)
-        Diagram.Nodes.Removed += node =>
+        diag.Nodes.Removed += node =>
         {
             if (_isBulkUpdating) return;
             _ = RequestFlowRecalculationAsync();
         };
 
-        // Enregistre le composant personnalisé pour les nœuds de machine
-        Diagram.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
+        // Enregistrement des widgets personnalisés (Machines, Stockages, Portails Bus et Liens)
+        diag.RegisterComponent<MachineNodeModel, MachineNodeWidget>();
+        diag.RegisterComponent<StorageNodeModel, StorageNodeWidget>();
+        diag.RegisterComponent<PortalNodeModel, PortalNodeWidget>();
+        diag.RegisterComponent<ResourceLinkModel, ResourceLinkWidget>();
 
-        // Enregistre le composant personnalisé pour les nœuds de stockage
-        Diagram.RegisterComponent<StorageNodeModel, StorageNodeWidget>();
+        return diag;
+    }
 
-        // Enregistre le rendu visuel de notre lien personnalisé
-        Diagram.RegisterComponent<ResourceLinkModel, ResourceLinkWidget>();
 
-        // Abonnement à l'événement de filtrage de ressource
+    // =========================================================================
+    // INITIALISATION DU COMPOSANT
+	// =========================================================================
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Création immédiate du premier onglet AVANT tout 'await'
+        // Garantit que ActiveTab et Diagram ne sont jamais null lors du premier rendu Blazor
+        var initialTab = new FactoryTab
+        {
+            Name = "Principal",
+            Diagram = CreateConfiguredDiagram()
+        };
+        Tabs.Add(initialTab);
+        ActiveTab = initialTab;
+        FlowEngine.RegisterTabs(Tabs);
+
+        // 2. Chargement des données globales
+        try
+        {
+            // Chargement du fichier unique
+            var data = await Http.GetFromJsonAsync<CoiData>("data/captain_of_industry_data.json");
+
+            if (data != null)
+            {
+                // Enregistrement des versions du JSON et du jeu dans le service
+                ResourceService.SetVersions(data.Generator, data.GameVersion);
+
+                if (data.Products != null)
+                {
+                    // Conserve la liste complète pour la barre de recherche
+                    _allProducts = data.Products;
+
+                    ProductDict = data.Products.ToDictionary(p => p.Id, p => p);
+                    ResourceService.LoadProducts(data.Products);
+                }
+
+                if (data.Machines != null)
+                {
+                    ResourceService.LoadMachines(data.Machines);
+                }
+
+                Recipes = data.Recipes;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur : {ex.Message}");
+        }
+
+        // 3. Abonnement à l'événement de filtrage de ressource
         ResourceService.OnResourceFilterRequested += HandleResourceFilterRequested;
 
-        // UN SEUL Recalcul initial ici, tout à la fin
-        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        // 4. Calcul initial des flux
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
 
+        // Force le re-rendu du tiroir avec les données prêtes
+        StateHasChanged();
     }
 
 
@@ -1069,24 +1284,89 @@ DefaultPathGenerator = new SmoothPathGenerator(),
     }
 
 
-    /// <summary>
-    /// Ajoute une machine sur le diagramme en la centrant exactement
-    /// dans la zone visible du canvas (prend en compte le zoom et le pan).
-    /// </summary>
-    /// <param name="recipe">La recette sélectionnée à instancier</param>
-    private async Task AddRecipeNode(Recipe recipe)
+    // =========================================================================
+    // ACTIONS SUR LES ONGLETS (SÉLECTION, CRÉATION, RENOMMAGE, SUPPRESSION)
+    // =========================================================================
+    private void SelectTab(string tabId)
     {
-        // Place le nouveau nœud avec un léger décalage à chaque clic
-        // var node = new MachineNodeModel(recipe, new Point(_spawnOffset, _spawnOffset));
-        // _spawnOffset += 40;
-        // if (_spawnOffset > 400) _spawnOffset = 150;
+        var target = Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (target != null && target != ActiveTab)
+        {
+            ActiveTab = target;
+            FlowEngine.RecalculateFlows(Tabs, ResourceService);
+            StateHasChanged();
+        }
+    }
 
-        // Diagram.Nodes.Add(node);
 
-        // Dimensions approximatives de la carte MachineNodeWidget pour centrer son milieu géométrique
-        const double nodeWidth = 330.0;
-        const double nodeHeight = 160.0;
+    private void AddNewTab()
+    {
+        var newTab = new FactoryTab
+        {
+            Name = $"Secteur {Tabs.Count + 1}",
+            Diagram = CreateConfiguredDiagram()
+        };
+        Tabs.Add(newTab);
+        ActiveTab = newTab;
+        FlowEngine.RegisterTabs(Tabs);
+        StateHasChanged();
+    }
 
+
+    private async Task RenameTab(FactoryTab tab)
+    {
+        var newName = await JS.InvokeAsync<string?>("prompt", "Nom de l'onglet (ex: Iron, Steel, Oil) :", tab.Name);
+        if (!string.IsNullOrWhiteSpace(newName))
+        {
+            tab.Name = newName.Trim();
+            FlowEngine.RecalculateFlows(Tabs, ResourceService);
+            StateHasChanged();
+        }
+    }
+
+
+    private async Task RemoveTab(FactoryTab tab)
+    {
+        if (Tabs.Count <= 1) return;
+
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            title: "Supprimer l'onglet",
+            message: $"Supprimer l'onglet '{tab.Name}' et toutes ses machines ?",
+            yesText: "Supprimer",
+            cancelText: "Annuler"
+        );
+
+        if (confirm != true) return;
+
+        Tabs.Remove(tab);
+        if (ActiveTab == tab)
+        {
+            ActiveTab = Tabs[0];
+        }
+
+        FlowEngine.RegisterTabs(Tabs);
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        StateHasChanged();
+    }
+
+
+    // =========================================================================
+    // PORTAILS INTER-ONGLETS (BUS EXPORT / IMPORT)
+    // =========================================================================
+    private IEnumerable<(string TabName, PortalNodeModel Portal)> GetAllExportPortals()
+    {
+        foreach (var tab in Tabs)
+        {
+            foreach (var p in tab.Diagram.Nodes.OfType<PortalNodeModel>().Where(n => n.Direction == PortalDirection.Export))
+            {
+                yield return (tab.Name, p);
+            }
+        }
+    }
+
+
+    private Blazor.Diagrams.Core.Geometry.Point GetCenteredSpawnPoint(double nodeWidth, double nodeHeight)
+    {
         // 1. Récupération des dimensions réelles de la zone visible du canvas
         // Si le conteneur n'a pas encore été mesuré par Blazor.Diagrams, on prend une taille de repli (ex: 1200x800)
         double canvasWidth = Diagram.Container?.Width ?? 1200;
@@ -1100,32 +1380,131 @@ DefaultPathGenerator = new SmoothPathGenerator(),
 
         // 3. Décalage pour centrer la machine + décalage en cascade si ajouts successifs
         double offset = GetNextCascadeOffset();
-        double targetX = centerX - (nodeWidth / 2.0) + offset;
-        double targetY = centerY - (nodeHeight / 2.0) + offset;
 
-        // 4. Instanciation du nœud à la position calculée
-        var machineNode = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
+        return new Blazor.Diagrams.Core.Geometry.Point(
+            centerX - (nodeWidth / 2.0) + offset,
+            centerY - (nodeHeight / 2.0) + offset
+        );
 
-        // 5. Désélectionne les éventuels éléments actifs et ajoute la machine
+    }
+
+
+    private async Task AddExportPortalNode(string productId)
+    {
+        _portalFilterText = "";
+        var prodName = ProductDict.TryGetValue(productId, out var prod) ? prod.Name : productId;
+        var pos = GetCenteredSpawnPoint(285.0, 90.0);
+
+        var exportNode = new PortalNodeModel(
+            PortalDirection.Export,
+            productId,
+            channelName: $"{prodName} ({ActiveTab.Name})",
+            position: pos
+        );
+
         Diagram.UnselectAll();
-        Diagram.Nodes.Add(machineNode);
+        Diagram.Nodes.Add(exportNode);
 
-        // 6. Force le rendu DOM pour que le widget de la machine soit monté
         StateHasChanged();
         await Task.Yield();
 
-        // 7. Sélectionne automatiquement la nouvelle machine posée
+        Diagram.SelectModel(exportNode, unselectOthers: true);
+        exportNode.Refresh();
+        Diagram.Refresh();
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+    }
+
+
+    private async Task AddImportPortalNode(PortalNodeModel sourceExport)
+    {
+        var pos = GetCenteredSpawnPoint(285.0, 90.0);
+
+        var importNode = new PortalNodeModel(
+            PortalDirection.Import,
+            sourceExport.ProductId,
+            channelName: sourceExport.ChannelName,
+            position: pos,
+            sourceExportPortalId: sourceExport.Id
+        );
+
+        Diagram.UnselectAll();
+        Diagram.Nodes.Add(importNode);
+
+        StateHasChanged();
+        await Task.Yield();
+
+        Diagram.SelectModel(importNode, unselectOthers: true);
+        importNode.Refresh();
+        Diagram.Refresh();
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+    }
+
+
+    // =========================================================================
+    // AJOUT DE MACHINES ET STOCKAGES
+    // =========================================================================
+
+    /// <summary>
+    /// Ajoute une machine sur le diagramme en la centrant exactement
+    /// dans la zone visible du canvas (prend en compte le zoom et le pan).
+    /// </summary>
+    /// <param name="recipe">La recette sélectionnée à instancier</param>
+    private async Task AddRecipeNode(Recipe recipe)
+    {
+        // 1. Calcul du point de spawn centré dans la zone visible du canvas
+        var pos = GetCenteredSpawnPoint(330.0, 160.0);
+
+        // 2. Instanciation du nœud à la position calculée
+        var machineNode = new MachineNodeModel(recipe, pos);
+
+        // 3. Désélectionne les éventuels éléments actifs et ajoute la machine
+        Diagram.UnselectAll();
+        Diagram.Nodes.Add(machineNode);
+
+        // 4. Force le rendu DOM pour que le widget de la machine soit monté
+        StateHasChanged();
+        await Task.Yield();
+
+        // 5. Sélectionne automatiquement la nouvelle machine posée
         Diagram.SelectModel(machineNode, unselectOthers: true);
 
-        // 8. Rafraîchissement géométrique et flux
+        // 6. Rafraîchissement géométrique et flux
         machineNode.Refresh();
         Diagram.Refresh();
-        FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+    }
 
-        // 5. Ajout au diagramme et recalcul des flux
-        //Diagram.Nodes.Add(machineNode);
-        //FlowEngine.RecalculateFlows(Diagram);
 
+    /// <summary>
+    /// Ajoute un nœud de stockage pour la ressource spécifiée sur le canvas,
+    /// le centre par rapport à la vue et force le rafraîchissement des ports.
+    /// </summary>
+    private async Task AddStorageNode(string productId)
+    {
+        // 1. Réinitialise le filtre de recherche du menu
+        _storageFilterText = "";
+
+		// 2. Calcul du point de spawn centré dans la zone visible du canvas
+        var pos = GetCenteredSpawnPoint(260.0, 100.0);
+
+        // 2. Création du nœud
+        var storageNode = new StorageNodeModel(productId, pos);
+
+        // 3. Désélectionne les anciens nœuds et ajoute le nouveau stockage
+        Diagram.UnselectAll();
+        Diagram.Nodes.Add(storageNode);
+
+        // 4. Laisse le temps au DOM de rendre StorageNodeWidget et PortRenderer
+        StateHasChanged();
+        await Task.Yield();
+
+        // 5. Sélectionne automatiquement le nouveau stockage posé
+        Diagram.SelectModel(storageNode, unselectOthers: true);
+
+        // 6. Force la mesure géométrique des ports, rafraîchit le canvas et calcule les flux
+        storageNode.Refresh();
+        Diagram.Refresh();
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
     }
 
 
@@ -1164,7 +1543,7 @@ DefaultPathGenerator = new SmoothPathGenerator(),
 
             // Ouverture de la boîte de dialogue MudBlazor (syntaxe asynchrone v7+)
             bool? confirm = await DialogService.ShowMessageBoxAsync(
-                title: "Delete the link",
+                title: "Delete",
                 message: message,
                 yesText: "Delete",
                 cancelText: "Cancel"
@@ -1172,7 +1551,6 @@ DefaultPathGenerator = new SmoothPathGenerator(),
 
             // Si l'utilisateur clique sur "Annuler" ou ferme la fenêtre, on stoppe tout
             if (confirm != true) return;
-
 
             // Suppression des liens sélectionnés
             foreach (var link in selectedLinks)
@@ -1185,9 +1563,6 @@ DefaultPathGenerator = new SmoothPathGenerator(),
             {
                 Diagram.Nodes.Remove(node);
             }
-
-            // Recalcul des débits après suppression
-            //FlowEngine.RecalculateFlows(Diagram, ResourceService);
         }
         // 2. Duplication par raccourci Ctrl + D
         else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
@@ -1201,433 +1576,6 @@ DefaultPathGenerator = new SmoothPathGenerator(),
         }
 
     }
-
-
-
-    // Ajoute un produit à l'historique :
-    // - S'il existe déjà : on le remet en tête de liste.
-    // - S'il n'existe pas : on l'insère à l'index 0.
-    // - Si la liste dépasse 10 éléments : on retire le plus ancien (le dernier).
-    private void AddToRecentSearches(Product? product)
-    {
-        if (product == null) return;
-
-        // Retrait de la position précédente si présent (dédoublonnage)
-        _recentProducts.RemoveAll(p => p.Id == product.Id);
-
-        // Insertion au tout début (le plus récent)
-        _recentProducts.Insert(0, product);
-
-        // Limitation stricte à 10 items maximum
-        if (_recentProducts.Count > MaxRecentSearches)
-        {
-            _recentProducts.RemoveAt(_recentProducts.Count - 1);
-        }
-    }
-
-
-
-    // Déclenché lors du clic sur une des icônes de la barre d'historique
-    private void SelectRecentProduct(Product product)
-    {
-        // 1. Réinjecte le produit dans la recherche
-        _selectedProduct = product;
-        _searchQuery = product.Id;
-        _currentSearchText = product.Name;
-
-        // 2. Remonte le produit cliqué en 1ère position dans l'historique
-        AddToRecentSearches(product);
-
-        // 3. Rafraîchit l'affichage
-        StateHasChanged();
-    }
-
-
-
-    // Nettoyage de l'événement lors de la destruction du composant
-    public void Dispose()
-    {
-        ResourceService.OnResourceFilterRequested -= HandleResourceFilterRequested;
-    }
-
-
-
-
-    /// <summary>
-    /// Réinitialise complètement le diagramme.
-    /// </summary>
-    private void ClearDiagram()
-    {
-        try
-        {
-            // Active le verrou avant de vider les collections
-            _isBulkUpdating = true;
-
-            // Supprime tous les liens puis tous les nœuds
-            Diagram.Links.Clear();
-            Diagram.Nodes.Clear();
-        }
-        finally
-        {
-            // Relâche toujours le verrou, même en cas d'erreur
-            _isBulkUpdating = false;
-        }
-
-        // Un seul recalcul à la fin
-        FlowEngine.RecalculateFlows(Diagram, ResourceService);
-        StateHasChanged();
-    }
-
-    /// <summary>
-    /// Sauvegarde l'état actuel du diagramme dans un fichier JSON téléchargé par le client.
-    /// </summary>
-    private async Task SaveDiagram()
-    {
-        try
-        {
-            var saveData = new DiagramSaveData();
-
-            // 1. Sauvegarde des nœuds (machines)
-            foreach (var node in Diagram.Nodes.OfType<MachineNodeModel>())
-            {
-                saveData.Nodes.Add(new SavedNodeData
-                {
-                    NodeId = node.Id,
-                    RecipeId = node.Recipe.RecipeId,
-                    MachineId = node.CurrentMachineId,
-                    Multiplier = node.Multiplier,
-                    X = node.Position.X,
-                    Y = node.Position.Y,
-
-                    // Mémorisation de l'ordre exact actuel des entrées et des sorties
-                    OrderedInputProductIds = node.Recipe.Inputs.Select(i => i.ProductId).ToList(),
-                    OrderedOutputProductIds = node.Recipe.Outputs.Select(o => o.ProductId).ToList()
-                });
-            }
-
-
-            // 2. Sauvegarde de tous les stockages (StorageNodeModel)
-            foreach (var storage in Diagram.Nodes.OfType<StorageNodeModel>())
-            {
-                saveData.Storages.Add(new SavedStorageData
-                {
-                    NodeId = storage.Id,
-                    ProductId = storage.ProductId,
-                    X = storage.Position.X,
-                    Y = storage.Position.Y
-                });
-            }
-
-
-            // 3. Sauvegarde de toutes les liaisons (câbles / tuyaux)
-            // Fonctionne indifféremment entre Machines et Stockages (Machine -> Machine, Machine -> Stockage, Stockage -> Machine)
-            foreach (var link in Diagram.Links)
-            {
-                if (link.Source is SinglePortAnchor srcAnchor &&
-                    srcAnchor.Port is ResourcePortModel srcPort &&
-                    link.Target is SinglePortAnchor tgtAnchor &&
-                    tgtAnchor.Port is ResourcePortModel tgtPort &&
-                    srcPort.Parent is NodeModel srcNode &&
-                    tgtPort.Parent is NodeModel tgtNode)
-                {
-                    var savedLink = new SavedLinkData
-                    {
-                        SourceNodeId = srcNode.Id,
-                        SourceProductId = srcPort.ProductId,
-                        SourceDirection = srcPort.Direction,
-
-                        TargetNodeId = tgtNode.Id,
-                        TargetProductId = tgtPort.ProductId,
-                        TargetDirection = tgtPort.Direction
-                    };
-
-                    // Mémorisation des points de passage
-                    foreach (var vertex in link.Vertices)
-                    {
-                        savedLink.Vertices.Add(new double[] { vertex.Position.X, vertex.Position.Y });
-                    }
-
-                    saveData.Links.Add(savedLink);
-
-                }
-            }
-
-            // 4. Sérialisation et téléchargement du JSON
-            var jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = true });
-            var fileName = $"factory_{DateTime.Now:yyyyMMdd_HHmmss}.json";
-            await JS.InvokeVoidAsync("downloadFileFromText", fileName, jsonString);
-
-            Snackbar.Add("Diagram saved successfully !", Severity.Success);
-
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error while saving : {ex.Message}", Severity.Error);
-        }
-
-    }
-
-
-
-    /// <summary>
-    /// Charge et reconstruit le diagramme depuis un fichier JSON sélectionné par l'utilisateur.
-    /// Recrée les machines, les stockages et rétablit tous les liens.
-    /// </summary>
-    private async Task LoadDiagram(InputFileChangeEventArgs e)
-    {
-        var file = e.File;
-        if (file == null) return;
-
-        try
-        {
-            // 1. Active le verrou dès le début pour bloquer les recalculs intermédiaires
-            _isBulkUpdating = true;
-
-            // 1. Initialisation de l'état de chargement
-            _isLoadingDiagram = true;
-            _loadingProgress = 0;
-            _loadingStatusText = "Reading the file...";
-            StateHasChanged();
-            await Task.Yield(); // Laisse le navigateur afficher l'overlay
-
-            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-            var saveData = await JsonSerializer.DeserializeAsync<DiagramSaveData>(stream);
-
-            if (saveData == null || Recipes == null)
-            {
-                Snackbar.Add("The save file is invalid.", Severity.Warning);
-                return;
-            }
-
-            // 2. Vider le diagramme actuel
-            // (instantané grâce à _isBulkUpdating = true)
-            _loadingStatusText = "Clearing previous factory...";
-            StateHasChanged();
-            await Task.Yield();
-
-            Diagram.Links.Clear();
-            Diagram.Nodes.Clear();
-
-            // Dictionnaire unifié pour mapper les anciens ID vers les nouvelles instances de NodeModel (Machines OU Stockages)
-            var allNodesMap = new Dictionary<string, NodeModel>();
-
-            // Variables pour le suivi de l'avancement
-            int totalNodes = saveData.Nodes.Count;
-            int totalStorages = saveData.Storages.Count;
-            int totalLinks = saveData.Links.Count;
-            int totalOperations = (totalNodes + totalLinks) > 0 ? (totalNodes + totalLinks) : 1;
-            int currentStep = 0;
-
-
-            // 3. Recréation des machines (MachineNodeModel)
-            for (int i = 0; i < totalNodes; i++)
-            {
-                var savedNode = saveData.Nodes[i];
-                // Recherche de la recette dans les données chargées
-                var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
-
-                if (recipe != null)
-                {
-                    // Instanciation de la machine à sa position d'origine
-                    var node = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(savedNode.X, savedNode.Y))
-                    {
-                        Multiplier = savedNode.Multiplier
-                    };
-
-                    // Restauration du niveau de machine si nécessaire
-                    if (!string.IsNullOrWhiteSpace(savedNode.MachineId) && node.CurrentMachineId != savedNode.MachineId)
-                    {
-                        while (node.CurrentMachineId != savedNode.MachineId && node.Upgrade()) { }
-                    }
-
-                    // Reconstitution de l'ordre personnalisé des ports
-                    node.ApplyCustomPortOrder(savedNode.OrderedInputProductIds, savedNode.OrderedOutputProductIds);
-
-                    Diagram.Nodes.Add(node);
-                    allNodesMap[savedNode.NodeId] = node;
-                }
-
-
-                currentStep++;
-                // Mise à jour de l'UI tous les 25 nœuds pour garder un chargement très rapide
-                if (i % 10 == 0 || i == totalNodes - 1)
-                {
-                    _loadingProgress = (int)((double)currentStep / totalOperations * 100);
-                    _loadingStatusText = $"Creation of the machines ({i + 1}/{totalNodes})...";
-                    StateHasChanged();
-                    await Task.Yield();
-                }
-
-            }
-
-
-            // 4. Recréation des stockages (StorageNodeModel)
-            for (int s = 0; s < totalStorages; s++)
-            {
-                var savedStorage = saveData.Storages[s];
-
-                var storageNode = new StorageNodeModel(
-                    savedStorage.ProductId,
-                    new Blazor.Diagrams.Core.Geometry.Point(savedStorage.X, savedStorage.Y)
-                );
-
-                Diagram.Nodes.Add(storageNode);
-                allNodesMap[savedStorage.NodeId] = storageNode;
-
-                currentStep++;
-                if (s % 10 == 0 || s == totalStorages - 1)
-                {
-                    _loadingProgress = (int)((double)currentStep / totalOperations * 100);
-                    _loadingStatusText = $"Création des stockages ({s + 1}/{totalStorages})...";
-                    StateHasChanged();
-                    await Task.Yield();
-                }
-            }
-
-
-            // 5. Reconnexion de tous les câbles et tuyaux
-            for (int j = 0; j < totalLinks; j++)
-            {
-                var savedLink = saveData.Links[j];
-
-                // Recherche des nœuds source et cible dans le dictionnaire global
-                if (allNodesMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
-                    allNodesMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
-                {
-                    // Recherche du port source correspondant par Direction et ProductId
-                    var srcPort = srcNode.Ports.OfType<ResourcePortModel>()
-                        .FirstOrDefault(p => p.Direction == savedLink.SourceDirection &&
-                                             string.Equals(p.ProductId, savedLink.SourceProductId, StringComparison.OrdinalIgnoreCase));
-
-                    // Recherche du port cible correspondant par Direction et ProductId
-                    var tgtPort = tgtNode.Ports.OfType<ResourcePortModel>()
-                        .FirstOrDefault(p => p.Direction == savedLink.TargetDirection &&
-                                             string.Equals(p.ProductId, savedLink.TargetProductId, StringComparison.OrdinalIgnoreCase));
-
-                    if (srcPort != null && tgtPort != null)
-                    {
-                        var link = new ResourceLinkModel(new SinglePortAnchor(srcPort), new SinglePortAnchor(tgtPort));
-
-                        // Attribution de la couleur de la ressource
-                        if (ProductDict.TryGetValue(srcPort.ProductId, out var prod) && !string.IsNullOrWhiteSpace(prod.Color))
-                        {
-                            link.Color = prod.Color;
-                        }
-
-                        // Restauration des sommets / points de passage
-                        if (savedLink.Vertices != null)
-                        {
-                            foreach (var pt in savedLink.Vertices)
-                            {
-                                if (pt.Length == 2)
-                                {
-                                    link.Vertices.Add(new LinkVertexModel(link, new Blazor.Diagrams.Core.Geometry.Point(pt[0], pt[1])));
-                                }
-                            }
-                        }
-
-                        Diagram.Links.Add(link);
-                    }
-                }
-
-
-                currentStep++;
-                // Mise à jour de l'UI toutes les 20 liaisons
-                if (j % 20 == 0 || j == totalLinks - 1)
-                {
-                    _loadingProgress = (int)((double)currentStep / totalOperations * 100);
-                    _loadingStatusText = $"Reconnecting the pipes ({j + 1}/{totalLinks})...";
-                    StateHasChanged();
-                    await Task.Yield();
-                }
-
-            }
-
-            // 6. Finalisation : Désactive le verrou et lance UN SEUL calcul global des flux
-            _loadingStatusText = "Flow calculation and balancing...";
-            _loadingProgress = 100;
-            StateHasChanged();
-            await Task.Yield();
-
-            _isBulkUpdating = false;
-            FlowEngine.RecalculateFlows(Diagram, ResourceService);
-            Diagram.Refresh();
-
-            Snackbar.Add("Diagram successfully loaded !", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error while loading : {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            // Sécurité : s'assure que le verrou et l'overlay sont toujours désactivés à la fin
-            _isBulkUpdating = false;
-            _isLoadingDiagram = false;
-            StateHasChanged();
-        }
-
-    }
-
-
-
-    /// <summary>
-    /// Ajoute un nœud de stockage pour la ressource spécifiée sur le canvas,
-    /// le centre par rapport à la vue et force le rafraîchissement des ports.
-    /// </summary>
-    private async Task AddStorageNode(string productId)
-    {
-        // 1. Réinitialise le filtre de recherche du menu
-        _storageFilterText = "";
-
-        // 2. Calcule une position centrée dans la vue visible du canvas
-        const double nodeWidth = 260.0;
-        const double nodeHeight = 100.0;
-
-        double canvasWidth = Diagram.Container?.Width ?? 1200;
-        double canvasHeight = Diagram.Container?.Height ?? 800;
-        double zoom = Diagram.Zoom;
-        double centerX = ((canvasWidth / 2.0) - Diagram.Pan.X) / zoom;
-        double centerY = ((canvasHeight / 2.0) - Diagram.Pan.Y) / zoom;
-
-        // 3. Décalage pour centrer le stockage + décalage en cascade
-        double offset = GetNextCascadeOffset();
-        double targetX = centerX - (nodeWidth / 2.0) + offset;
-        double targetY = centerY - (nodeHeight / 2.0) + offset;
-
-        // 3. Création du nœud
-        var storageNode = new StorageNodeModel(productId, new Blazor.Diagrams.Core.Geometry.Point(targetX, targetY));
-
-        // 4. Désélectionne les anciens nœuds et ajoute le nouveau stockage
-        Diagram.UnselectAll();
-        Diagram.Nodes.Add(storageNode);
-
-        // 5. Laisse le temps au DOM de rendre StorageNodeWidget et PortRenderer
-        StateHasChanged();
-        await Task.Yield();
-
-        // 6. Sélectionne automatiquement le nouveau stockage posé
-        Diagram.SelectModel(storageNode, unselectOthers: true);
-
-        // 7. Force la mesure géométrique des ports, rafraîchit le canvas et calcule les flux
-        storageNode.Refresh();
-        Diagram.Refresh();
-        FlowEngine.RecalculateFlows(Diagram, ResourceService);
-
-
-
-        // Diagram.Nodes.Add(storageNode);
-
-        // // 4. Laisse le temps au DOM de rendre StorageNodeWidget et PortRenderer
-        // StateHasChanged();
-        // await Task.Yield();
-
-        // // 5. Force la mesure géométrique des ports et redessine le canvas
-        // storageNode.Refresh();
-        // Diagram.Refresh();
-        // FlowEngine.RecalculateFlows(Diagram, ResourceService);
-    }
-
 
 
     /// <summary>
@@ -1674,8 +1622,18 @@ DefaultPathGenerator = new SmoothPathGenerator(),
         // Cas 2 : Duplication d'un stockage (StorageNodeModel)
         else if (originalNode is StorageNodeModel storageSrc)
         {
-            var storageClone = new StorageNodeModel(storageSrc.ProductId, newPosition);
-            newNode = storageClone;
+            newNode = new StorageNodeModel(storageSrc.ProductId, newPosition);
+        }
+		// Cas 3 : Duplication d'un portail (PortalNodeModel)
+        else if (originalNode is PortalNodeModel portalSrc)
+        {
+            newNode = new PortalNodeModel(
+                portalSrc.Direction,
+                portalSrc.ProductId,
+                portalSrc.Direction == PortalDirection.Export ? $"{portalSrc.ChannelName} (copie)" : portalSrc.ChannelName,
+                newPosition,
+                portalSrc.SourceExportPortalId
+            );
         }
 
         if (newNode != null)
@@ -1696,11 +1654,433 @@ DefaultPathGenerator = new SmoothPathGenerator(),
             // Rafraîchit géométriquement le nœud et le canvas
             newNode.Refresh();
             Diagram.Refresh();
-            FlowEngine.RecalculateFlows(Diagram, ResourceService);
+            FlowEngine.RecalculateFlows(Tabs, ResourceService);
 
             Snackbar.Add("Duplicate item !", Severity.Info);
         }
     }
 
+
+    // =========================================================================
+    // HISTORIQUE DES RECHERCHES
+    // =========================================================================
+    // Ajoute un produit à l'historique :
+    // - S'il existe déjà : on le remet en tête de liste.
+    // - S'il n'existe pas : on l'insère à l'index 0.
+    // - Si la liste dépasse 10 éléments : on retire le plus ancien (le dernier).
+    private void AddToRecentSearches(Product? product)
+    {
+        if (product == null) return;
+
+        // Retrait de la position précédente si présent (dédoublonnage)
+        _recentProducts.RemoveAll(p => p.Id == product.Id);
+
+        // Insertion au tout début (le plus récent)
+        _recentProducts.Insert(0, product);
+
+        // Limitation stricte à 10 items maximum
+        if (_recentProducts.Count > MaxRecentSearches)
+        {
+            _recentProducts.RemoveAt(_recentProducts.Count - 1);
+        }
+    }
+
+
+    // Déclenché lors du clic sur une des icônes de la barre d'historique
+    private void SelectRecentProduct(Product product)
+    {
+        // 1. Réinjecte le produit dans la recherche
+        _selectedProduct = product;
+        _searchQuery = product.Id;
+        _currentSearchText = product.Name;
+
+        // 2. Remonte le produit cliqué en 1ère position dans l'historique
+        AddToRecentSearches(product);
+
+        // 3. Rafraîchit l'affichage
+        StateHasChanged();
+    }
+
+
+    // Nettoyage de l'événement lors de la destruction du composant
+    public void Dispose()
+    {
+        ResourceService.OnResourceFilterRequested -= HandleResourceFilterRequested;
+    }
+
+
+    // =========================================================================
+    // CLEAR, SAVE & LOAD MULTI-ONGLETS (AVEC RÉTROCOMPATIBILITÉ v1.x)
+    // =========================================================================
+
+    /// <summary>
+    /// Réinitialise complètement le diagramme.
+    /// </summary>
+    private void ClearDiagram()
+    {
+        try
+        {
+            // Active le verrou avant de vider les collections
+            _isBulkUpdating = true;
+
+            // Supprime tous les liens puis tous les nœuds
+            Diagram.Links.Clear();
+            Diagram.Nodes.Clear();
+        }
+        finally
+        {
+            // Relâche toujours le verrou, même en cas d'erreur
+            _isBulkUpdating = false;
+        }
+
+        // Un seul recalcul à la fin
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        StateHasChanged();
+    }
+
+
+    /// <summary>
+    /// Sauvegarde l'état actuel du diagramme dans un fichier JSON téléchargé par le client.
+    /// </summary>
+    private async Task SaveDiagram()
+    {
+        try
+        {
+            var saveData = new DiagramSaveData { Version = "2.0" };
+
+
+            foreach (var tab in Tabs)
+            {
+                var savedTab = new SavedTabData
+                {
+                    TabId = tab.Id,
+                    Name = tab.Name
+                };
+
+                // 1. Sauvegarde des nœuds (machines)
+                foreach (var node in tab.Diagram.Nodes.OfType<MachineNodeModel>())
+                {
+                    savedTab.Nodes.Add(new SavedNodeData
+                    {
+                        NodeId = node.Id,
+                        RecipeId = node.Recipe.RecipeId,
+                        MachineId = node.CurrentMachineId,
+                        Multiplier = node.Multiplier,
+                        X = node.Position.X,
+                        Y = node.Position.Y,
+
+                        // Mémorisation de l'ordre exact actuel des entrées et des sorties
+                        OrderedInputProductIds = node.Recipe.Inputs.Select(i => i.ProductId).ToList(),
+                        OrderedOutputProductIds = node.Recipe.Outputs.Select(o => o.ProductId).ToList()
+                    });
+                }
+
+                // 2. Sauvegarde de tous les stockages (StorageNodeModel)
+                foreach (var storage in tab.Diagram.Nodes.OfType<StorageNodeModel>())
+                {
+                    savedTab.Storages.Add(new SavedStorageData
+                    {
+                        NodeId = storage.Id,
+                        ProductId = storage.ProductId,
+                        X = storage.Position.X,
+                        Y = storage.Position.Y
+                    });
+                }
+
+				// 3. Sauvegarde de tous les portails (PortalNodeModel)
+                foreach (var portal in tab.Diagram.Nodes.OfType<PortalNodeModel>())
+                {
+                    savedTab.Portals.Add(new SavedPortalData
+                    {
+                        NodeId = portal.Id,
+                        Direction = portal.Direction,
+                        ProductId = portal.ProductId,
+                        ChannelName = portal.ChannelName,
+                        SourceExportPortalId = portal.SourceExportPortalId,
+                        X = portal.Position.X,
+                        Y = portal.Position.Y
+                    });
+                }
+
+                // 4. Sauvegarde de toutes les liaisons (câbles / tuyaux)
+                // Fonctionne indifféremment entre Machines et Stockages (Machine -> Machine, Machine -> Stockage, Stockage -> Machine)
+                foreach (var link in tab.Diagram.Links)
+                {
+                    if (link.Source is SinglePortAnchor srcAnchor &&
+                        srcAnchor.Port is ResourcePortModel srcPort &&
+                        link.Target is SinglePortAnchor tgtAnchor &&
+                        tgtAnchor.Port is ResourcePortModel tgtPort &&
+                        srcPort.Parent is NodeModel srcNode &&
+                        tgtPort.Parent is NodeModel tgtNode)
+                    {
+                        var savedLink = new SavedLinkData
+                        {
+                            SourceNodeId = srcNode.Id,
+                            SourceProductId = srcPort.ProductId,
+                            SourceDirection = srcPort.Direction,
+                            TargetNodeId = tgtNode.Id,
+                            TargetProductId = tgtPort.ProductId,
+                            TargetDirection = tgtPort.Direction
+                        };
+
+                        // Mémorisation des points de passage
+                        foreach (var vertex in link.Vertices)
+                        {
+                            savedLink.Vertices.Add(new double[] { vertex.Position.X, vertex.Position.Y });
+                        }
+
+                        savedTab.Links.Add(savedLink);
+                    }
+                }
+
+                saveData.Tabs.Add(savedTab);
+            }
+
+            // 4. Sérialisation et téléchargement du JSON
+            var jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = true });
+            var fileName = $"factory_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            await JS.InvokeVoidAsync("downloadFileFromText", fileName, jsonString);
+
+            Snackbar.Add("Diagram saved successfully !", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error while saving : {ex.Message}", Severity.Error);
+        }
+    }
+
+
+    /// <summary>
+    /// Charge et reconstruit le diagramme depuis un fichier JSON sélectionné par l'utilisateur.
+    /// Recrée les machines, les stockages et rétablit tous les liens.
+    /// </summary>
+    private async Task LoadDiagram(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        try
+        {
+            // 1. Active le verrou dès le début pour bloquer les recalculs intermédiaires
+            _isBulkUpdating = true;
+
+            // 2. Initialisation de l'état de chargement
+            _isLoadingDiagram = true;
+            _loadingProgress = 0;
+            _loadingStatusText = "Reading the file...";
+            StateHasChanged();
+
+            // Laisse le navigateur afficher l'overlay
+            await Task.Yield();
+
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var saveData = await JsonSerializer.DeserializeAsync<DiagramSaveData>(stream);
+
+            if (saveData == null || Recipes == null)
+            {
+                Snackbar.Add("The save file is invalid.", Severity.Warning);
+                return;
+            }
+
+            // Rétrocompatibilité avec les anciennes sauvegardes mono-onglet (v1.x)
+            if (saveData.Tabs.Count == 0 && (saveData.Nodes.Count > 0 || saveData.Storages.Count > 0))
+            {
+                saveData.Tabs.Add(new SavedTabData
+                {
+                    TabId = Guid.NewGuid().ToString("N"),
+                    Name = "Principal",
+                    Nodes = saveData.Nodes,
+                    Storages = saveData.Storages,
+                    Links = saveData.Links
+                });
+            }
+
+            // 2. Vider le diagramme actuel
+            // (instantané grâce à _isBulkUpdating = true)
+            _loadingStatusText = "Clearing previous factory...";
+            StateHasChanged();
+            await Task.Yield();
+
+            Tabs.Clear();
+
+            var exportPortalIdMap = new Dictionary<string, string>();
+            var importedPortalsToRelink = new List<(PortalNodeModel ImportPortal, string OldExportId)>();
+
+            int totalTabs = Math.Max(1, saveData.Tabs.Count);
+
+            for (int t = 0; t < saveData.Tabs.Count; t++)
+            {
+                var savedTab = saveData.Tabs[t];
+                var tab = new FactoryTab
+                {
+                    Id = string.IsNullOrWhiteSpace(savedTab.TabId) ? Guid.NewGuid().ToString("N") : savedTab.TabId,
+                    Name = string.IsNullOrWhiteSpace(savedTab.Name) ? $"Secteur {t + 1}" : savedTab.Name,
+                    Diagram = CreateConfiguredDiagram()
+                };
+
+                // Dictionnaire unifié pour mapper les anciens ID vers les nouvelles instances de NodeModel (Machines OU Stockages)
+                var allNodesMap = new Dictionary<string, NodeModel>();
+
+                // 1. Recréation des machines (MachineNodeModel)
+                for (int i = 0; i < savedTab.Nodes.Count; i++)
+                {
+                    var savedNode = savedTab.Nodes[i];
+                    // Recherche de la recette dans les données chargées
+                    var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
+
+                    if (recipe != null)
+                    {
+                        // Instanciation de la machine à sa position d'origine
+                        var node = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(savedNode.X, savedNode.Y))
+                        {
+                            Multiplier = savedNode.Multiplier
+                        };
+
+                        // Restauration du niveau de machine si nécessaire
+                        if (!string.IsNullOrWhiteSpace(savedNode.MachineId) && node.CurrentMachineId != savedNode.MachineId)
+                        {
+                            while (node.CurrentMachineId != savedNode.MachineId && node.Upgrade()) { }
+                        }
+
+                        // Reconstitution de l'ordre personnalisé des ports
+                        node.ApplyCustomPortOrder(savedNode.OrderedInputProductIds, savedNode.OrderedOutputProductIds);
+
+                        tab.Diagram.Nodes.Add(node);
+                        allNodesMap[savedNode.NodeId] = node;
+                    }
+                }
+
+                // 2. Recréation des stockages
+                for (int s = 0; s < savedTab.Storages.Count; s++)
+                {
+                    var savedStorage = savedTab.Storages[s];
+                    var storageNode = new StorageNodeModel(
+                        savedStorage.ProductId,
+                        new Blazor.Diagrams.Core.Geometry.Point(savedStorage.X, savedStorage.Y)
+                    );
+
+                    tab.Diagram.Nodes.Add(storageNode);
+                    allNodesMap[savedStorage.NodeId] = storageNode;
+                }
+
+                // 3. Recréation des portails Export / Import
+                for (int p = 0; p < savedTab.Portals.Count; p++)
+                {
+                    var savedPortal = savedTab.Portals[p];
+                    var portalNode = new PortalNodeModel(
+                        savedPortal.Direction,
+                        savedPortal.ProductId,
+                        savedPortal.ChannelName,
+                        new Blazor.Diagrams.Core.Geometry.Point(savedPortal.X, savedPortal.Y)
+                    );
+
+                    tab.Diagram.Nodes.Add(portalNode);
+                    allNodesMap[savedPortal.NodeId] = portalNode;
+
+                    if (savedPortal.Direction == PortalDirection.Export)
+                    {
+                        exportPortalIdMap[savedPortal.NodeId] = portalNode.Id;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(savedPortal.SourceExportPortalId))
+                    {
+                        importedPortalsToRelink.Add((portalNode, savedPortal.SourceExportPortalId));
+                    }
+                }
+
+                // 4. Reconnexion des câbles et tuyaux de l'onglet
+                for (int j = 0; j < savedTab.Links.Count; j++)
+                {
+                    var savedLink = savedTab.Links[j];
+
+                    // Recherche des nœuds source et cible dans le dictionnaire global
+                    if (allNodesMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
+                        allNodesMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
+                    {
+                        // Recherche du port source correspondant par Direction et ProductId
+                        var srcPort = srcNode.Ports.OfType<ResourcePortModel>()
+                            .FirstOrDefault(p => p.Direction == savedLink.SourceDirection &&
+                                                 string.Equals(p.ProductId, savedLink.SourceProductId, StringComparison.OrdinalIgnoreCase));
+
+                        // Recherche du port cible correspondant par Direction et ProductId
+                        var tgtPort = tgtNode.Ports.OfType<ResourcePortModel>()
+                            .FirstOrDefault(p => p.Direction == savedLink.TargetDirection &&
+                                                 string.Equals(p.ProductId, savedLink.TargetProductId, StringComparison.OrdinalIgnoreCase));
+
+                        if (srcPort != null && tgtPort != null)
+                        {
+                            var link = new ResourceLinkModel(new SinglePortAnchor(srcPort), new SinglePortAnchor(tgtPort));
+
+                            // Attribution de la couleur de la ressource
+                            if (ProductDict.TryGetValue(srcPort.ProductId, out var prod) && !string.IsNullOrWhiteSpace(prod.Color))
+                            {
+                                link.Color = prod.Color;
+                            }
+
+                            // Restauration des sommets / points de passage
+                            if (savedLink.Vertices != null)
+                            {
+                                foreach (var pt in savedLink.Vertices)
+                                {
+                                    if (pt.Length == 2)
+                                    {
+                                        link.Vertices.Add(new LinkVertexModel(link, new Blazor.Diagrams.Core.Geometry.Point(pt[0], pt[1])));
+                                    }
+                                }
+                            }
+
+                            tab.Diagram.Links.Add(link);
+                        }
+                    }
+                }
+
+                Tabs.Add(tab);
+
+                _loadingProgress = (int)((double)(t + 1) / totalTabs * 90);
+                _loadingStatusText = $"Loading tab '{tab.Name}' ({t + 1}/{totalTabs})...";
+                StateHasChanged();
+                await Task.Yield();
+            }
+
+            // Rebranche les portails Import vers les nouveaux identifiants des portails Export
+            foreach (var (importPortal, oldExportId) in importedPortalsToRelink)
+            {
+                if (exportPortalIdMap.TryGetValue(oldExportId, out var newExportId))
+                {
+                    importPortal.SourceExportPortalId = newExportId;
+                }
+            }
+
+            if (Tabs.Count == 0)
+            {
+                Tabs.Add(new FactoryTab { Name = "Principal", Diagram = CreateConfiguredDiagram() });
+            }
+
+            ActiveTab = Tabs[0];
+            FlowEngine.RegisterTabs(Tabs);
+
+            // 6. Finalisation : Désactive le verrou et lance UN SEUL calcul global des flux
+            _loadingStatusText = "Flow calculation and balancing...";
+            _loadingProgress = 100;
+            StateHasChanged();
+            await Task.Yield();
+
+            _isBulkUpdating = false;
+            FlowEngine.RecalculateFlows(Tabs, ResourceService);
+            Diagram.Refresh();
+
+            Snackbar.Add($"Diagram successfully loaded ({Tabs.Count} tab(s)) !", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error while loading : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            // Sécurité : s'assure que le verrou et l'overlay sont toujours désactivés à la fin
+            _isBulkUpdating = false;
+            _isLoadingDiagram = false;
+            StateHasChanged();
+        }
+    }
 
 }

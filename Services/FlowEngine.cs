@@ -9,25 +9,76 @@ namespace CaptainArchitect.Services;
 
 public static class FlowEngine
 {
+    // Référence statique vers la liste globale des onglets actifs
+    // Permet aux widgets enfants (MachineNodeWidget, StorageNodeWidget) qui n'ont que "Diagram"
+    // de déclencher automatiquement un recalcul global de tous les onglets.
+    private static List<FactoryTab>? _registeredTabs;
+
+
+    /// <summary>
+    /// Enregistre la liste globale des onglets auprès du moteur de flux.
+    /// </summary>
+    public static void RegisterTabs(List<FactoryTab> tabs)
+    {
+        _registeredTabs = tabs;
+    }
+
+
+    /// <summary>
+    /// Surcharge rétrocompatible appelée par les widgets individuels.
+    /// Si des onglets sont enregistrés, recalcule toute l'usine multi-onglets.
+    /// </summary>
     public static void RecalculateFlows(BlazorDiagram diagram, ResourceService resourceService)
     {
-        var machineNodes = diagram.Nodes.OfType<MachineNodeModel>().ToList();
-        var storageNodes = diagram.Nodes.OfType<StorageNodeModel>().ToList();
-
-        // 0. Réinitialiser le débit de tous les câbles
-        foreach (var link in diagram.Links.OfType<ResourceLinkModel>())
+        if (_registeredTabs != null && _registeredTabs.Count > 0)
         {
-            link.FlowRate = 0m;
-            link.MaxFlowRate = 0m;
+            RecalculateFlows(_registeredTabs, resourceService);
+            return;
         }
 
-        // 1. Réinitialiser les débits entrants et sortants distribués
-        foreach (var node in machineNodes)
+        // Mode repli sur un seul diagramme
+        RecalculateFlowsOnDiagrams(new List<BlazorDiagram> { diagram }, resourceService);
+    }
+
+
+    /// <summary>
+    /// Point d'entrée principal multi-onglets : calcule les flux de tous les onglets simultanément
+    /// et propage les débits à travers les portails Export -> Import.
+    /// </summary>
+    public static void RecalculateFlows(List<FactoryTab> tabs, ResourceService resourceService)
+    {
+        if (tabs == null || tabs.Count == 0) return;
+        _registeredTabs = tabs;
+
+        var diagrams = tabs.Select(t => t.Diagram).Where(d => d != null).ToList();
+        RecalculateFlowsOnDiagrams(diagrams, resourceService);
+    }
+
+
+    private static void RecalculateFlowsOnDiagrams(List<BlazorDiagram> diagrams, ResourceService resourceService)
+    {
+        var allMachines = diagrams.SelectMany(d => d.Nodes.OfType<MachineNodeModel>()).ToList();
+        var allStorages = diagrams.SelectMany(d => d.Nodes.OfType<StorageNodeModel>()).ToList();
+        var allPortals = diagrams.SelectMany(d => d.Nodes.OfType<PortalNodeModel>()).ToList();
+
+        // 0. Réinitialiser le débit de tous les câbles sur tous les onglets
+        foreach (var diagram in diagrams)
+        {
+            foreach (var link in diagram.Links.OfType<ResourceLinkModel>())
+            {
+                link.FlowRate = 0m;
+                link.MaxFlowRate = 0m;
+            }
+        }
+
+        // 1. Réinitialiser les débits des machines, stockages et portails
+
+        // 1.1 Réinitialiser les débits des machines
+        foreach (var node in allMachines)
         {
             node.ActualInputRates.Clear();
             node.DistributedOutputRates.Clear();
             node.DownstreamDemandRates.Clear();
-            //node.OperationalEfficiency = 1.0m;
 
             foreach (var port in node.Ports.OfType<ResourcePortModel>())
             {
@@ -41,21 +92,27 @@ public static class FlowEngine
             }
         }
 
-
-        // Réinitialiser les débits calculés pour les stockages
-        foreach (var storage in storageNodes)
+        // 1.2 Réinitialiser les débits calculés pour les stockages
+        foreach (var storage in allStorages)
         {
             storage.TotalInputRate = 0m;
             storage.DistributedOutputRate = 0m;
             storage.DownstreamDemandRate = 0m;
         }
 
+        // 1.3 Réinitialiser les débits calculés pour les portails
+        foreach (var portal in allPortals)
+        {
+            portal.TotalInputRate = 0m;
+            portal.DistributedOutputRate = 0m;
+            portal.DownstreamDemandRate = 0m;
+        }
 
         // 2. Première passe : calcul des demandes et distribution de la production nominale
-        DistributeAllFlows(diagram, machineNodes, storageNodes, useActualProduction: false);
+        DistributeAllFlows(diagrams, allMachines, allStorages, allPortals, useActualProduction: false);
 
-        // 3. Calcul du taux d'activité (Efficiency) selon les entrées connectées
-        foreach (var node in machineNodes)
+        // 3. Calcul du taux d'activité (OperationalEfficiency) de chaque machine
+        foreach (var node in allMachines)
         {
             // Si en pause, l'efficacité opérationnelle passe à 0
             if (node.IsPaused)
@@ -79,6 +136,7 @@ public static class FlowEngine
             foreach (var port in connectedInputPorts)
             {
                 var inputItem = node.Recipe.Inputs.FirstOrDefault(i => i.ProductId == port.ProductId);
+                
                 if (inputItem != null)
                 {
                     decimal required = node.GetInputRatePerMin(inputItem);
@@ -92,8 +150,10 @@ public static class FlowEngine
             node.OperationalEfficiency = Math.Clamp(minRatio, 0m, 1m);
         }
 
-        // 4. Deuxième passe : redistribution tenant compte de la production réelle
-        foreach (var node in machineNodes)
+        // 4. Deuxième passe : redistribution tenant compte des efficacités réelles
+
+        // 4.1
+        foreach (var node in allMachines)
         {
             foreach (var port in node.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Input))
             {
@@ -101,45 +161,41 @@ public static class FlowEngine
             }
         }
 
-        foreach (var storage in storageNodes)
+        // 4.2
+        foreach (var storage in allStorages)
         {
             storage.TotalInputRate = 0m;
             storage.DistributedOutputRate = 0m;
             storage.DownstreamDemandRate = 0m;
         }
 
-        DistributeAllFlows(diagram, machineNodes, storageNodes, useActualProduction: true);
-
-
-        // 5. Rafraîchissement des nœuds graphiques
-        foreach (var node in machineNodes)
+        // 4.3
+        foreach (var portal in allPortals)
         {
-            // OPTIMISATION : Ne rafraîchir que les nœuds qui possèdent au moins un lien,
-            // ou dont les flux ont été calculés. Les machines isolées n'ont pas besoin d'être redessinées.
-            //bool hasLinks = node.Ports.Any(p => p.Links.Count > 0);
-
-            //if (hasLinks)
-            //{
-                node.Refresh();
-            //}
-        }
-
-        foreach (var storage in storageNodes)
-        {
-            storage.Refresh();
+            portal.TotalInputRate = 0m;
+            portal.DistributedOutputRate = 0m;
+            portal.DownstreamDemandRate = 0m;
         }
 
 
-        // =========================================================================
-        // Calcul automatique des totaux ouvriers et électricité
-        // =========================================================================
+        DistributeAllFlows(diagrams, allMachines, allStorages, allPortals, useActualProduction: true);
+
+
+        // 5. Rafraîchissement visuel de tous les nœuds sur tous les onglets
+        foreach (var node in allMachines) node.Refresh();
+        foreach (var storage in allStorages) storage.Refresh();
+        foreach (var portal in allPortals) portal.Refresh();
+
+
+        // 6. Calcul global des ouvriers et de l'électricité sur TOUTE l'usine (tous onglets cumulés)
         int totalWorkers = 0;
         decimal totalPowerKw = 0m;
 
-        foreach (var node in machineNodes)
+        foreach (var node in allMachines)
         {
             // Récupération des données réelles de la machine (Workers, Power)
             var machine = resourceService.GetMachine(node.CurrentMachineId);
+
             if (machine != null)
             {
                 // Multiplié par le nombre de machines (Multiplier)
@@ -159,25 +215,31 @@ public static class FlowEngine
 
 
     /// <summary>
-    /// Distribue les flux depuis les machines productrices ET depuis les stockages.
-    /// Exécute 2 passes pour assurer la transmission à travers les stockages intermédiaires.
+    /// Propage les flux sur chaque diagramme ET transfère les ressources entre portails Export -> Import.
+    /// Exécute 3 passes pour résoudre les chaînes Machine -> Stockage -> Export -> Import -> Machine.
     /// </summary>
-    private static void DistributeAllFlows(BlazorDiagram diagram, List<MachineNodeModel> machineNodes, List<StorageNodeModel> storageNodes, bool useActualProduction)
+    private static void DistributeAllFlows(
+        List<BlazorDiagram> diagrams,
+        List<MachineNodeModel> allMachines,
+        List<StorageNodeModel> allStorages,
+        List<PortalNodeModel> allPortals,
+        bool useActualProduction)
     {
-        // 2 itérations suffisent pour résoudre la chaîne Machine -> Stockage -> Machine
-        for (int iter = 0; iter < 2; iter++)
+        var exportPortals = allPortals.Where(p => p.Direction == PortalDirection.Export).ToList();
+        var importPortals = allPortals.Where(p => p.Direction == PortalDirection.Import).ToList();
+
+        // Exécute 3 passes
+        for (int iter = 0; iter < 3; iter++)
         {
-            // 1. Réinitialiser les entrées accumulées sur les stockages avant chaque itération
-            // pour éviter d'additionner deux fois le flux
-            foreach (var storage in storageNodes)
-            {
-                storage.TotalInputRate = 0m;
-            }
+            // 1. Réinitialisation des accumulateurs d'entrée avant chaque itération
+            //    pour éviter d'additionner deux fois le flux
+            foreach (var storage in allStorages) storage.TotalInputRate = 0m;
+            foreach (var portal in allPortals) portal.TotalInputRate = 0m;
 
 
             // 2. Réinitialiser également les entrées des machines avant chaque passage
-            // pour éviter d'additionner 2 fois le flux distribué (évite le 7.5 + 7.5 = 15)
-            foreach (var node in machineNodes)
+            //    pour éviter d'additionner 2 fois le flux distribué (évite le 7.5 + 7.5 = 15)
+            foreach (var node in allMachines)
             {
                 foreach (var port in node.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Input))
                 {
@@ -186,39 +248,114 @@ public static class FlowEngine
             }
 
 
-            // Distribution depuis les machines
-            foreach (var sourceNode in machineNodes)
+            // A. Distribution locale sur chaque onglet
+            foreach (var diagram in diagrams)
             {
-                foreach (var outputPort in sourceNode.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Output))
-                {
-                    var outputItem = sourceNode.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
-                    if (outputItem == null) continue;
+                var tabMachines = diagram.Nodes.OfType<MachineNodeModel>().ToList();
+                var tabStorages = diagram.Nodes.OfType<StorageNodeModel>().ToList();
+                var tabImports = diagram.Nodes.OfType<PortalNodeModel>().Where(p => p.Direction == PortalDirection.Import).ToList();
 
-                    decimal availableRate = 0m;
-                    if (!sourceNode.IsPaused)
+
+                // 1. Depuis les machines de cet onglet
+                foreach (var sourceNode in tabMachines)
+                {
+                    foreach (var outputPort in sourceNode.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Output))
                     {
-                        availableRate = useActualProduction
-                            ? sourceNode.GetActualProducedRatePerMin(outputItem)
-                            : sourceNode.GetOutputRatePerMin(outputItem);
+                        var outputItem = sourceNode.Recipe.Outputs.FirstOrDefault(o => o.ProductId == outputPort.ProductId);
+                        if (outputItem == null) continue;
+
+                        decimal availableRate = 0m;
+
+                        if (!sourceNode.IsPaused)
+                        {
+                            availableRate = useActualProduction
+                                ? sourceNode.GetActualProducedRatePerMin(outputItem)
+                                : sourceNode.GetOutputRatePerMin(outputItem);
+                        }
+
+                        DistributeFromPort(diagram, outputPort, availableRate, out decimal totalDemand, out decimal deliveredTotal);
+                        sourceNode.DownstreamDemandRates[outputPort.Id] = totalDemand;
+                        sourceNode.DistributedOutputRates[outputPort.Id] = deliveredTotal;
+                    }
+                }
+
+
+                // 2. Depuis les stockages de cet onglet
+                foreach (var storage in tabStorages)
+                {
+                    // Un stockage distribue ce qu'il a reçu en entrée
+                    decimal availableInStorage = storage.TotalInputRate;
+
+                    DistributeFromPort(diagram, storage.OutputPort, availableInStorage, out decimal downstreamDemand, out decimal deliveredTotal);
+                    storage.DownstreamDemandRate = downstreamDemand;
+                    storage.DistributedOutputRate = deliveredTotal;
+                }
+
+
+                // 3. Depuis les portails Import de cet onglet (qui injectent ce qu'ils ont reçu du bus au tour précédent)
+                foreach (var importPortal in tabImports)
+                {
+                    DistributeFromPort(diagram, importPortal.Port, importPortal.TotalInputRate, out decimal downstreamDemand, out decimal deliveredTotal);
+                    importPortal.DownstreamDemandRate = downstreamDemand;
+                    importPortal.DistributedOutputRate = deliveredTotal;
+                }
+
+            } // Boucle A.
+
+
+            // B. Transfert inter-onglets sur le Bus : chaque portail Export répartit son débit vers ses portails Import abonnés
+            foreach (var exportPortal in exportPortals)
+            {
+                var subscribers = importPortals
+                    .Where(imp => imp.SourceExportPortalId == exportPortal.Id &&
+                                  string.Equals(imp.ProductId, exportPortal.ProductId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (subscribers.Count == 0)
+                {
+                    exportPortal.DownstreamDemandRate = 0m;
+                    exportPortal.DistributedOutputRate = 0m;
+                    continue;
+                }
+
+                // Somme des demandes de tous les onglets qui importent ce canal
+                decimal totalBusDemand = 0m;
+                var subscriberDemands = new Dictionary<PortalNodeModel, decimal>();
+
+                foreach (var sub in subscribers)
+                {
+                    decimal demand = sub.DownstreamDemandRate > 0 ? sub.DownstreamDemandRate : 9999m;
+                    subscriberDemands[sub] = demand;
+                    totalBusDemand += demand;
+                }
+
+                exportPortal.DownstreamDemandRate = totalBusDemand;
+
+                // Répartition au prorata entre les onglets consommateurs
+                decimal deliveredOnBus = 0m;
+                decimal availableFromExport = exportPortal.TotalInputRate;
+
+                foreach (var sub in subscribers)
+                {
+                    decimal demand = subscriberDemands[sub];
+                    decimal allocated = 0m;
+
+                    if (totalBusDemand > 0)
+                    {
+                        allocated = availableFromExport >= totalBusDemand
+                            ? demand
+                            : availableFromExport * (demand / totalBusDemand);
                     }
 
-                    DistributeFromPort(diagram, outputPort, availableRate, out decimal totalDemand, out decimal deliveredTotal);
-                    sourceNode.DownstreamDemandRates[outputPort.Id] = totalDemand;
-                    sourceNode.DistributedOutputRates[outputPort.Id] = deliveredTotal;
+                    sub.TotalInputRate = allocated;
+                    deliveredOnBus += allocated;
                 }
-            }
 
-            // Distribution depuis les stockages
-            foreach (var storage in storageNodes)
-            {
-                // Un stockage distribue ce qu'il a reçu en entrée
-                decimal availableInStorage = storage.TotalInputRate;
+                exportPortal.DistributedOutputRate = deliveredOnBus;
 
-                DistributeFromPort(diagram, storage.OutputPort, availableInStorage, out decimal downstreamDemand, out decimal deliveredTotal);
-                storage.DownstreamDemandRate = downstreamDemand;
-                storage.DistributedOutputRate = deliveredTotal;
-            }
-        }
+            } // Boucle B.
+
+        } // Boucle 3 passes
     }
 
 
@@ -233,6 +370,7 @@ public static class FlowEngine
 
         // Trouver les ports d'entrée cibles via les liens du diagramme
         var connectedTargetPorts = new List<ResourcePortModel>();
+
         foreach (var link in diagram.Links)
         {
             ResourcePortModel? src = (link.Source as SinglePortAnchor)?.Port as ResourcePortModel;
@@ -263,6 +401,11 @@ public static class FlowEngine
                 // Si la cible est un stockage, sa demande correspond à ce que ses consommateurs aval lui réclament
                 demand = targetStorage.DownstreamDemandRate > 0 ? targetStorage.DownstreamDemandRate : 9999m;
             }
+            else if (targetPort.Parent is PortalNodeModel { Direction: PortalDirection.Export } targetExport)
+            {
+                // Un portail Export réclame la somme des demandes de tous les onglets qui l'importent
+                demand = targetExport.DownstreamDemandRate > 0 ? targetExport.DownstreamDemandRate : 9999m;
+            }
 
             targetDemands[targetPort] = demand;
             totalDemand += demand;
@@ -291,10 +434,14 @@ public static class FlowEngine
             {
                 targetStorage.TotalInputRate += allocated;
             }
+            else if (targetPort.Parent is PortalNodeModel { Direction: PortalDirection.Export } targetExport)
+            {
+                targetExport.TotalInputRate += allocated;
+            }
 
 
             // =========================================================================
-            // AFFECTATION AU CÂBLE (ResourceLinkModel) :
+            // Affectation du débit au câble (ResourceLinkModel)
             // =========================================================================
             var targetLink = diagram.Links
                 .OfType<ResourceLinkModel>()

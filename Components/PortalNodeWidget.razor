@@ -1,0 +1,352 @@
+﻿@using MudBlazor
+@using Blazor.Diagrams.Components.Renderers
+@using Blazor.Diagrams.Core
+@using CaptainArchitect.Models
+@using CaptainArchitect.Services
+@inject ResourceService ResourceService
+
+<div class="portal-card @(Node.Direction == PortalDirection.Export ? "portal-export" : "portal-import") @(Node.Selected ? "selected" : "")">
+    <!-- En-tête : Badge Export/Import, Nom du canal, Bouton supprimer -->
+    <div class="portal-header">
+        <span class="portal-type-badge">
+            @(Node.Direction == PortalDirection.Export ? "EXPORT" : "IMPORT")
+        </span>
+
+        @if (Node.Direction == PortalDirection.Export)
+        {
+            <!-- Champ éditable pour nommer le canal sur le bus -->
+            <input class="portal-name-input"
+                   value="@Node.ChannelName"
+                   @onchange="OnChannelNameChanged"
+                   @onclick:stopPropagation="true"
+                   @onmousedown:stopPropagation="true"
+                   placeholder="Nom du canal..."
+                   title="Renommer ce canal Export" />
+        }
+        else
+        {
+            <span class="portal-title" title="@CurrentSourceLabel">@CurrentSourceLabel</span>
+        }
+
+        <button class="btn-delete" title="Supprimer le portail" @onclick="DeleteNode" @onclick:stopPropagation="true">✕</button>
+    </div>
+
+    <!-- Corps du portail -->
+    <div class="portal-body">
+        @if (Node.Direction == PortalDirection.Export)
+        {
+            <!-- PORTAIL EXPORT : Port d'entrée à gauche, Badge au centre, Résumé bus à droite -->
+            <div class="port-side left">
+                <PortRenderer Port="Node.Port" Class="diagram-port" />
+                <div class="rate-stack text-left">
+                    <span class="rate-label">Reçu</span>
+                    <span class="rate-value in-rate">@Node.TotalInputRate.ToString("0.#")/m</span>
+                </div>
+            </div>
+
+            <div class="portal-center">
+                <ResourceBadge ProductId="@Node.ProductId" />
+                @{
+                    var net = Node.TotalInputRate - Node.DownstreamDemandRate;
+                    var hasConsumers = Node.DownstreamDemandRate > 0.001m;
+                }
+                <span class="portal-status @(hasConsumers ? (net < -0.01m ? "status-deficit" : "status-ok") : "status-idle")">
+                    @if (!hasConsumers)
+                    {
+                        <span>Non utilisé</span>
+                    }
+                    else if (net < -0.01m)
+                    {
+                        <span>@net.ToString("0.#")/m</span>
+                    }
+                    else
+                    {
+                        <span>+@net.ToString("0.#")/m</span>
+                    }
+                </span>
+            </div>
+
+            <div class="port-side right pr-2">
+                <div class="rate-stack text-right">
+                    <span class="rate-label">Demande bus</span>
+                    <span class="rate-value bus-rate">@Node.DownstreamDemandRate.ToString("0.#")/m</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- PORTAIL IMPORT : Sélecteur de canal Export + Badge à gauche, Port de sortie à droite -->
+            <div class="import-selector-zone pl-2" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true">
+                <ResourceBadge ProductId="@Node.ProductId" />
+                <div class="d-flex flex-column gap-1" style="min-width: 125px; max-width: 135px;">
+                    <select class="portal-select" value="@(Node.SourceExportPortalId ?? "")" @onchange="OnSourceExportChanged">
+                        <option value="">-- Choisir source --</option>
+                        @foreach (var exp in AvailableExportsForProduct)
+                        {
+                            <option value="@exp.Portal.Id">[@exp.TabName] @exp.Portal.ChannelName (@exp.Portal.TotalInputRate.ToString("0.#")/m)</option>
+                        }
+                    </select>
+
+                    @if (LinkedExportInfo != null)
+                    {
+                        <button class="btn-jump-tab" @onclick="JumpToSourceTab" title="Aller vers l'onglet @LinkedExportInfo.Value.TabName">
+                            ↗ Onglet : @LinkedExportInfo.Value.TabName
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="port-side right">
+                <div class="rate-stack text-right">
+                    <span class="rate-label">Injecté</span>
+                    <span class="rate-value out-rate">@Node.DistributedOutputRate.ToString("0.#")/m</span>
+                    @if (Node.DownstreamDemandRate > Node.TotalInputRate + 0.01m)
+                    {
+                        <span class="demand-label">Req: @Node.DownstreamDemandRate.ToString("0.#")/m</span>
+                    }
+                </div>
+                <PortRenderer Port="Node.Port" Class="diagram-port" />
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .portal-card {
+        width: 285px !important;
+        min-width: 285px !important;
+        background: #1e1e24;
+        border: 2px solid #52525b;
+        border-radius: 8px;
+        color: #f4f4f5;
+        font-family: sans-serif;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        user-select: none;
+    }
+    .portal-card.portal-export {
+        border-color: #8b5cf6;
+    }
+    .portal-card.portal-import {
+        border-color: #06b6d4;
+    }
+    .portal-card.selected {
+        box-shadow: 0 0 0 2px #fbbf24;
+    }
+    .portal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        background: #141418;
+        padding: 4px 8px;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+        border-bottom: 1px solid #3f3f46;
+    }
+    .portal-type-badge {
+        font-size: 0.62rem;
+        font-weight: 800;
+        padding: 1px 5px;
+        border-radius: 3px;
+        letter-spacing: 0.5px;
+    }
+    .portal-export .portal-type-badge {
+        background: #8b5cf633;
+        color: #c4b5fd;
+        border: 1px solid #8b5cf6;
+    }
+    .portal-import .portal-type-badge {
+        background: #06b6d433;
+        color: #67e8f9;
+        border: 1px solid #06b6d4;
+    }
+    .portal-name-input {
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 4px;
+        color: #f4f4f5;
+        font-size: 0.75rem;
+        padding: 1px 6px;
+        width: 165px;
+        outline: none;
+    }
+    .portal-name-input:focus {
+        border-color: #a78bfa;
+    }
+    .portal-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #e4e4e7;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 165px;
+    }
+    .btn-delete {
+        background: transparent;
+        border: none;
+        color: #ef4444;
+        font-size: 0.9rem;
+        cursor: pointer;
+        padding: 0 2px;
+    }
+    .portal-body {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        min-height: 58px;
+    }
+    .port-side {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .portal-center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+    }
+    .import-selector-zone {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .portal-select {
+        background: #27272a;
+        color: #f4f4f5;
+        border: 1px solid #52525b;
+        border-radius: 4px;
+        font-size: 0.70rem;
+        padding: 2px 4px;
+        width: 100%;
+    }
+    .btn-jump-tab {
+        background: #06b6d422;
+        border: 1px solid #06b6d466;
+        color: #67e8f9;
+        border-radius: 3px;
+        font-size: 0.64rem;
+        padding: 1px 5px;
+        cursor: pointer;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .btn-jump-tab:hover {
+        background: #06b6d444;
+    }
+    .rate-stack {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+        font-size: 0.70rem;
+    }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
+    .rate-label {
+        font-size: 0.60rem;
+        color: #a1a1aa;
+        text-transform: uppercase;
+    }
+    .rate-value { font-weight: bold; }
+    .in-rate { color: #38bdf8; }
+    .out-rate { color: #4ade80; }
+    .bus-rate { color: #c4b5fd; }
+    .demand-label { color: #f87171; font-size: 0.62rem; }
+    .portal-status {
+        font-size: 0.62rem;
+        font-weight: bold;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #27272a;
+    }
+    .status-ok { color: #4ade80; }
+    .status-deficit { color: #f87171; }
+    .status-idle { color: #9ca3af; }
+</style>
+
+@code {
+    [CascadingParameter] public BlazorDiagram Diagram { get; set; } = default!;
+
+    // Liste de tous les onglets transmise en cascade depuis Home.razor
+    [CascadingParameter(Name = "AllFactoryTabs")] public List<FactoryTab>? AllTabs { get; set; }
+
+    // Callback pour changer d'onglet actif au clic sur "↗ Onglet : ..."
+    [CascadingParameter(Name = "SelectTabCallback")] public EventCallback<string> OnSelectTab { get; set; }
+
+    [Parameter] public PortalNodeModel Node { get; set; } = default!;
+
+    private Product? ProductEntity => ResourceService.GetProduct(Node.ProductId);
+
+    // Liste de tous les portails Export disponibles dans l'usine pour la même ressource
+    private IEnumerable<(string TabId, string TabName, PortalNodeModel Portal)> AvailableExportsForProduct
+    {
+        get
+        {
+            if (AllTabs == null) yield break;
+            foreach (var tab in AllTabs)
+            {
+                foreach (var export in tab.Diagram.Nodes.OfType<PortalNodeModel>()
+                    .Where(p => p.Direction == PortalDirection.Export &&
+                                string.Equals(p.ProductId, Node.ProductId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    yield return (tab.Id, tab.Name, export);
+                }
+            }
+        }
+    }
+
+    // Retrouve le portail Export actuellement lié à cet Import
+    private (string TabId, string TabName, PortalNodeModel Portal)? LinkedExportInfo =>
+        AvailableExportsForProduct.FirstOrDefault(x => x.Portal.Id == Node.SourceExportPortalId) is var match && match.Portal != null
+            ? match
+            : null;
+
+    private string CurrentSourceLabel =>
+        LinkedExportInfo != null
+            ? $"{LinkedExportInfo.Value.Portal.ChannelName}"
+            : (ProductEntity?.Name ?? Node.ProductId);
+
+    private void OnChannelNameChanged(ChangeEventArgs e)
+    {
+        Node.ChannelName = e.Value?.ToString() ?? Node.ProductId;
+        RecalculateAllTabs();
+    }
+
+    private void OnSourceExportChanged(ChangeEventArgs e)
+    {
+        var selectedId = e.Value?.ToString();
+        Node.SourceExportPortalId = string.IsNullOrWhiteSpace(selectedId) ? null : selectedId;
+        RecalculateAllTabs();
+    }
+
+    private async Task JumpToSourceTab()
+    {
+        if (LinkedExportInfo != null && OnSelectTab.HasDelegate)
+        {
+            await OnSelectTab.InvokeAsync(LinkedExportInfo.Value.TabId);
+        }
+    }
+
+    private void DeleteNode()
+    {
+        Diagram.Nodes.Remove(Node);
+        RecalculateAllTabs();
+    }
+
+    private void RecalculateAllTabs()
+    {
+        if (AllTabs != null && AllTabs.Count > 0)
+        {
+            FlowEngine.RecalculateFlows(AllTabs, ResourceService);
+        }
+        else
+        {
+            FlowEngine.RecalculateFlows(Diagram, ResourceService);
+        }
+    }
+
+}

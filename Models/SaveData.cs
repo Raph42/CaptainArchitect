@@ -1,13 +1,20 @@
 ﻿namespace CaptainArchitect.Models;
 
 /// <summary>
-/// Structure principale du fichier de sauvegarde du diagramme.
+/// Structure principale du fichier JSON de sauvegarde (Version 2.0 multi-onglets).
+/// Conserve les champs racine pour la rétrocompatibilité avec les sauvegardes v1.x.
 /// </summary>
 public class DiagramSaveData
 {
     // Version du format de sauvegarde au cas où la structure évolue
-    public string Version { get; set; } = "1.1";
+    public string Version { get; set; } = "2.0";
 
+    // Liste des onglets de l'usine (ex: "Iron", "Steel", etc.)
+    public List<SavedTabData> Tabs { get; set; } = new();
+
+
+    // --- Champs hérités (v1.x) conservés pour ouvrir les anciennes sauvegardes ---
+    //
     // Liste des machines posées sur le diagramme
     public List<SavedNodeData> Nodes { get; set; } = new();
 
@@ -17,6 +24,36 @@ public class DiagramSaveData
     // Liste des stockages sauvegardés
     public List<SavedStorageData> Storages { get; set; } = new();
 }
+
+
+/// <summary>
+/// Contenu sauvegardé d'un onglet individuel.
+/// </summary>
+public class SavedTabData
+{
+    public string TabId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public List<SavedNodeData> Nodes { get; set; } = new();
+    public List<SavedStorageData> Storages { get; set; } = new();
+    public List<SavedPortalData> Portals { get; set; } = new();
+    public List<SavedLinkData> Links { get; set; } = new();
+}
+
+
+/// <summary>
+/// Représentation sérialisée d'un portail inter-onglets (Export ou Import).
+/// </summary>
+public class SavedPortalData
+{
+    public string NodeId { get; set; } = string.Empty;
+    public PortalDirection Direction { get; set; }
+    public string ProductId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public string? SourceExportPortalId { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+}
+
 
 /// <summary>
 /// Représentation d'une machine posée.
@@ -48,6 +85,24 @@ public class SavedNodeData
 
 
 /// <summary>
+/// Représentation sérialisée d'un nœud de stockage.
+/// </summary>
+public class SavedStorageData
+{
+    // Identifiant unique du nœud de stockage
+    public string NodeId { get; set; } = string.Empty;
+
+    // Identifiant de la ressource stockée (ex: "IronOre", "Water")
+    public string ProductId { get; set; } = string.Empty;
+
+    // Coordonnées sur le canvas
+    public double X { get; set; }
+    public double Y { get; set; }
+
+}
+
+
+/// <summary>
 /// Liaison identifiée précisément par le produit et la direction du port
 /// </summary>
 public class SavedLinkData
@@ -67,20 +122,3 @@ public class SavedLinkData
 
 }
 
-
-/// <summary>
-/// Représentation sérialisée d'un nœud de stockage.
-/// </summary>
-public class SavedStorageData
-{
-    // Identifiant unique du nœud de stockage
-    public string NodeId { get; set; } = string.Empty;
-
-    // Identifiant de la ressource stockée (ex: "IronOre", "Water")
-    public string ProductId { get; set; } = string.Empty;
-
-    // Coordonnées sur le canvas
-    public double X { get; set; }
-    public double Y { get; set; }
-
-}
