@@ -216,7 +216,7 @@ public static class FlowEngine
 
     /// <summary>
     /// Propage les flux sur chaque diagramme ET transfère les ressources entre portails Export -> Import.
-    /// Exécute 3 passes pour résoudre les chaînes Machine -> Stockage -> Export -> Import -> Machine.
+    /// Exécute 4 passes pour résoudre les chaînes complètes (Machine -> Stockage -> Export -> Import -> Stockage -> Machine).
     /// </summary>
     private static void DistributeAllFlows(
         List<BlazorDiagram> diagrams,
@@ -228,16 +228,24 @@ public static class FlowEngine
         var exportPortals = allPortals.Where(p => p.Direction == PortalDirection.Export).ToList();
         var importPortals = allPortals.Where(p => p.Direction == PortalDirection.Import).ToList();
 
-        // Exécute 3 passes
-        for (int iter = 0; iter < 3; iter++)
+        // 4 itérations permettent de traverser sans perte : Machine -> Stockage -> Export -> Import -> Stockage -> Machine
+        for (int iter = 0; iter < 4; iter++)
         {
-            // 1. Réinitialisation des accumulateurs d'entrée avant chaque itération
+            // 1. Réinitialiser les entrées accumulées sur les stockages avant chaque itération
             //    pour éviter d'additionner deux fois le flux
-            foreach (var storage in allStorages) storage.TotalInputRate = 0m;
-            foreach (var portal in allPortals) portal.TotalInputRate = 0m;
+            foreach (var storage in allStorages)
+            {
+                storage.TotalInputRate = 0m;
+            }
 
+            // 2. Réinitialiser UNIQUEMENT les portails Export (qui reçoivent des flux locaux à l'étape A).
+            //    Les portails Import doivent conserver le TotalInputRate reçu du bus à l'étape B de l'itération précédente !
+            foreach (var exportPortal in exportPortals)
+            {
+                exportPortal.TotalInputRate = 0m;
+            }
 
-            // 2. Réinitialiser également les entrées des machines avant chaque passage
+            // 3. Réinitialiser également les entrées des machines avant chaque passage
             //    pour éviter d'additionner 2 fois le flux distribué (évite le 7.5 + 7.5 = 15)
             foreach (var node in allMachines)
             {
@@ -247,7 +255,6 @@ public static class FlowEngine
                 }
             }
 
-
             // A. Distribution locale sur chaque onglet
             foreach (var diagram in diagrams)
             {
@@ -255,8 +262,7 @@ public static class FlowEngine
                 var tabStorages = diagram.Nodes.OfType<StorageNodeModel>().ToList();
                 var tabImports = diagram.Nodes.OfType<PortalNodeModel>().Where(p => p.Direction == PortalDirection.Import).ToList();
 
-
-                // 1. Depuis les machines de cet onglet
+                // 1. Distribution depuis les machines de cet onglet
                 foreach (var sourceNode in tabMachines)
                 {
                     foreach (var outputPort in sourceNode.Ports.OfType<ResourcePortModel>().Where(p => p.Direction == PortDirection.Output))
@@ -280,7 +286,7 @@ public static class FlowEngine
                 }
 
 
-                // 2. Depuis les stockages de cet onglet
+                // 2. Distribution depuis les stockages de cet onglet
                 foreach (var storage in tabStorages)
                 {
                     // Un stockage distribue ce qu'il a reçu en entrée
@@ -292,7 +298,7 @@ public static class FlowEngine
                 }
 
 
-                // 3. Depuis les portails Import de cet onglet (qui injectent ce qu'ils ont reçu du bus au tour précédent)
+                // 3. Distribution depuis les portails Import de cet onglet (injectent ce qu'ils ont reçu du bus)
                 foreach (var importPortal in tabImports)
                 {
                     DistributeFromPort(diagram, importPortal.Port, importPortal.TotalInputRate, out decimal downstreamDemand, out decimal deliveredTotal);
@@ -355,7 +361,7 @@ public static class FlowEngine
 
             } // Boucle B.
 
-        } // Boucle 3 passes
+        } // Boucle 4 passes
     }
 
 
