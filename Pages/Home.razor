@@ -85,14 +85,24 @@
                     Load
                 </MudButton>
 
-                <!-- 3. Bouton Vider l'onglet actif -->
+                <!-- 3. Bouton Nouveau projet (réinitialise toute l'usine après confirmation) -->
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Warning"
+                           StartIcon="@Icons.Material.Filled.NoteAdd"
+                           Size="MudBlazor.Size.Small"
+                           Class="tool-btn"
+                           OnClick="NewFactory">
+                    New
+                </MudButton>
+
+                <!-- 4. Bouton Vider l'onglet actif -->
                 <MudButton Variant="Variant.Text"
                            Color="Color.Error"
                            StartIcon="@Icons.Material.Filled.DeleteSweep"
                            Size="MudBlazor.Size.Small"
                            Class="tool-btn text-muted-hover"
                            OnClick="ClearDiagram">
-                    Clear
+                    Clear Tab
                 </MudButton>
 
             </div>
@@ -337,7 +347,7 @@
                         <!-- Bouton renommer l'onglet -->
                         <button type="button"
                                 class="tab-action-btn edit"
-                                title="Renommer l'onglet"
+                                title="Rename Tab"
                                 @onclick="@(() => RenameTab(tab))"
                                 @onclick:stopPropagation="true">
                             ✎
@@ -348,7 +358,7 @@
                         {
                             <button type="button"
                                     class="tab-action-btn close"
-                                    title="Supprimer l'onglet"
+                                    title="Delete Tab"
                                     @onclick="@(() => RemoveTab(tab))"
                                     @onclick:stopPropagation="true">
                                 ✕
@@ -364,7 +374,7 @@
                            Size="MudBlazor.Size.Small"
                            Class="tool-btn"
                            OnClick="AddNewTab">
-                    Onglet
+                    Tab
                 </MudButton>
             </div>
 
@@ -559,9 +569,9 @@
     }
 
     .tool-btn {
-        font-size: 0.75rem !important;
+        font-size: 0.72rem !important;
         text-transform: none !important;
-        padding: 3px 8px !important;
+        padding: 3px 6px !important;
         height: 28px !important;
         min-height: 28px !important;
     }
@@ -1227,7 +1237,7 @@
         // Garantit que ActiveTab et Diagram ne sont jamais null lors du premier rendu Blazor
         var initialTab = new FactoryTab
         {
-            Name = "Principal",
+            Name = "Main",
             Diagram = CreateConfiguredDiagram()
         };
         Tabs.Add(initialTab);
@@ -1303,7 +1313,7 @@
     {
         var newTab = new FactoryTab
         {
-            Name = $"Secteur {Tabs.Count + 1}",
+            Name = $"Sector {Tabs.Count + 1}",
             Diagram = CreateConfiguredDiagram()
         };
         Tabs.Add(newTab);
@@ -1712,6 +1722,66 @@
     // =========================================================================
     // CLEAR, SAVE & LOAD MULTI-ONGLETS (AVEC RÉTROCOMPATIBILITÉ v1.x)
     // =========================================================================
+
+    // =========================================================================
+    // CLEAR, SAVE & LOAD MULTI-ONGLETS (AVEC RÉTROCOMPATIBILITÉ v1.x)
+    // =========================================================================
+
+    /// <summary>
+    /// Réinitialise complètement toute l'usine après confirmation de l'utilisateur
+    /// (supprime tous les onglets et recrée un onglet unique "Main" comme au démarrage).
+    /// </summary>
+    private async Task NewFactory()
+    {
+        // 1. Demande de confirmation avant de tout effacer (syntaxe asynchrone MudBlazor v7+)
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            title: "New Factory",
+            message: "Are you sure you want to start a new factory? All tabs, machines, and links will be cleared.",
+            yesText: "New",
+            cancelText: "Cancel"
+        );
+
+        // Si l'utilisateur clique sur "Cancel" ou ferme la boîte de dialogue, on annule l'opération
+        if (confirm != true) return;
+
+        try
+        {
+            // 2. Active le verrou pour bloquer tout recalcul intermédiaire pendant le nettoyage
+            _isBulkUpdating = true;
+
+            // 3. Vide tous les onglets existants (machines, stockages, portails et liaisons)
+            Tabs.Clear();
+
+            // 4. Recrée l'onglet initial unique "Main", exactement comme dans OnInitializedAsync()
+            var initialTab = new FactoryTab
+            {
+                Name = "Main",
+                Diagram = CreateConfiguredDiagram()
+            };
+            Tabs.Add(initialTab);
+            ActiveTab = initialTab;
+
+            // 5. Réinitialise le décalage en cascade des nouveaux éléments et les filtres de menus
+            _cascadeOffset = 0.0;
+            _storageFilterText = "";
+            _portalFilterText = "";
+
+            // 6. Ré-enregistre la nouvelle liste d'onglets auprès du moteur de flux
+            FlowEngine.RegisterTabs(Tabs);
+        }
+        finally
+        {
+            // 7. Relâche toujours le verrou, même en cas d'erreur
+            _isBulkUpdating = false;
+        }
+
+        // 8. Recalcule les flux (remet également les ouvriers et l'électricité à 0 dans la barre supérieure)
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        StateHasChanged();
+
+        Snackbar.Add("New factory initialized !", Severity.Info);
+    }
+
 
     /// <summary>
     /// Réinitialise complètement le diagramme.
