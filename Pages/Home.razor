@@ -333,23 +333,44 @@
         <div class="factory-tabs-bar d-flex align-center justify-space-between px-2 py-1"
              style="@(_drawerOpen ? "padding-left: 348px !important;" : "padding-left: 54px !important;")">
 
-            <!-- Liste horizontale des onglets -->
+            <!-- Liste horizontale des onglets (réorganisable par glisser-déposer) -->
             <div class="d-flex align-center gap-1 flex-wrap" style="min-width: 0;">
                 @foreach (var tab in Tabs)
                 {
                     bool isActive = tab.Id == ActiveTab?.Id;
+                    bool isDragging = _draggedTab?.Id == tab.Id;
+                    bool isDragOver = _dragOverTab?.Id == tab.Id && _draggedTab?.Id != tab.Id;
+
                     <div @key="tab.Id"
-                         class="factory-tab-chip @(isActive ? "active" : "")"
-                         @onclick="@(() => SelectTab(tab.Id))">
+                         draggable="true"
+                         class="factory-tab-chip @(isActive ? "active" : "") @(isDragging ? "dragging" : "") @(isDragOver ? "drag-over" : "")"
+                         title="Cliquer pour ouvrir • Glisser-déposer pour déplacer l'ordre"
+                         @onclick="@(() => SelectTab(tab.Id))"
+                         @ondragstart="@(() => OnTabDragStart(tab))"
+                         @ondragover="@(() => OnTabDragOver(tab))"
+                         @ondragover:preventDefault="true"
+                         @ondrop="@(() => OnTabDrop(tab))"
+                         @ondragend="OnTabDragEnd">
+
+                         <!-- Icône de ressource si une icône a été choisie pour cet onglet -->
+                        @if (!string.IsNullOrWhiteSpace(tab.IconProductId) && ProductDict.TryGetValue(tab.IconProductId, out var tabProd))
+                        {
+                            <img src="@GetProductImagePath(tabProd)"
+                                 alt="@tab.Name"
+                                 class="tab-resource-icon"
+                                 draggable="false" />
+                        }
 
                         <span class="tab-name">@tab.Name</span>
 
-                        <!-- Bouton renommer l'onglet -->
+                        <!-- Bouton modifier le nom et l'icône de l'onglet -->
                         <button type="button"
+                                draggable="false"
                                 class="tab-action-btn edit"
-                                title="Rename Tab"
-                                @onclick="@(() => RenameTab(tab))"
-                                @onclick:stopPropagation="true">
+                                title="Edit Tab Name & Icon"
+                                @onclick="@(() => OpenEditTabModal(tab))"
+                                @onclick:stopPropagation="true"
+                                @ondragstart:stopPropagation="true">
                             ✎
                         </button>
 
@@ -357,13 +378,16 @@
                         @if (Tabs.Count > 1)
                         {
                             <button type="button"
+                                    draggable="false"
                                     class="tab-action-btn close"
                                     title="Delete Tab"
                                     @onclick="@(() => RemoveTab(tab))"
-                                    @onclick:stopPropagation="true">
+                                    @onclick:stopPropagation="true"
+                                    @ondragstart:stopPropagation="true">
                                 ✕
                             </button>
                         }
+
                     </div>
                 }
 
@@ -490,6 +514,133 @@
                     </MudText>
                 </div>
             </MudOverlay>
+
+
+            <!-- Fenêtre modale d'édition du nom et de l'icône d'un onglet -->
+            <MudOverlay Visible="@_isEditingTab"
+                        DarkBackground="true"
+                        Absolute="true"
+                        ZIndex="1100">
+                <div class="pa-5 rounded-lg"
+                     style="background: #27272a; border: 1px solid #3f3f46; width: 380px; max-width: 92vw; box-shadow: 0 12px 30px rgba(0,0,0,0.75); color: #f4f4f5;"
+                     @onclick:stopPropagation="true"
+                     @onkeydown:stopPropagation="true">
+
+                    <!-- Titre de la fenêtre -->
+                    <div class="d-flex align-center justify-space-between mb-3">
+                        <MudText Typo="Typo.h6" Style="color: #38bdf8; font-weight: 600;">
+                            Modifier l'onglet
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                       Size="MudBlazor.Size.Small"
+                                       Color="Color.Default"
+                                       OnClick="CancelEditTab" />
+                    </div>
+
+                    <!-- 1. Recherche d'une ressource pour choisir son icône et remplir le nom -->
+                    <MudText Typo="Typo.caption" Style="color: #a1a1aa;" Class="d-block mb-1">
+                        Choisir une ressource (remplit automatiquement le nom) :
+                    </MudText>
+
+                    <MudAutocomplete T="Product"
+                                     Placeholder="Rechercher une ressource (ex: Iron, Steel)..."
+                                     SearchFunc="@SearchTabIconProducts"
+                                     ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                     Value="_editingTabSelectedProduct"
+                                     ValueChanged="@OnEditTabProductSelected"
+                                     Clearable="true"
+                                     ResetValueOnEmptyText="true"
+                                     CoerceText="false"
+                                     CoerceValue="false"
+                                     Dense="true"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     Adornment="Adornment.Start"
+                                     AdornmentIcon="@Icons.Material.Filled.Search"
+                                     MaxItems="300"
+                                     MaxHeight="240"
+                                     Class="mb-3 search-autocomplete"
+                                     PopoverClass="autocomplete-popover-dark">
+
+                        <!-- Ligne de suggestion avec l'icône et le nom de la ressource -->
+                        <ItemTemplate Context="prod">
+                            <div class="d-flex align-center gap-2 py-1">
+                                <img src="@GetProductImagePath(prod)"
+                                     alt="@prod.Name"
+                                     style="width: 22px; height: 22px; object-fit: contain; flex-shrink: 0;" />
+                                <MudText Typo="Typo.body2">@prod.Name</MudText>
+                            </div>
+                        </ItemTemplate>
+
+                        <NoItemsTemplate>
+                            <MudText Typo="Typo.body2" Class="pa-2 text-muted">Aucune ressource trouvée</MudText>
+                        </NoItemsTemplate>
+                    </MudAutocomplete>
+
+                    <!-- 2. Champ texte du nom de l'onglet (pré-rempli par la ressource ou saisi librement) -->
+                    <MudText Typo="Typo.caption" Style="color: #a1a1aa;" Class="d-block mb-1">
+                        Nom de l'onglet :
+                    </MudText>
+
+                    <MudTextField @bind-Value="_editingTabName"
+                                  Placeholder="Nom de l'onglet (ex: Iron, Steel, Oil)..."
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  Class="mb-3 search-autocomplete"
+                                  @onkeyup="HandleEditTabKeyUp" />
+
+                    <!-- 3. Aperçu en direct de l'onglet avec son icône -->
+                    <div class="d-flex align-center justify-space-between pa-2 mb-4 rounded"
+                         style="background: #18181b; border: 1px solid #3f3f46;">
+                        <div class="d-flex align-center gap-2">
+                            <span style="font-size: 0.72rem; color: #71717a;">Aperçu :</span>
+                            <div class="factory-tab-chip active" style="cursor: default;">
+                                @if (!string.IsNullOrWhiteSpace(_editingTabIconProductId) && ProductDict.TryGetValue(_editingTabIconProductId, out var previewProd))
+                                {
+                                    <img src="@GetProductImagePath(previewProd)"
+                                         alt="@previewProd.Name"
+                                         class="tab-resource-icon" />
+                                }
+                                <span class="tab-name">@(string.IsNullOrWhiteSpace(_editingTabName) ? "Onglet" : _editingTabName)</span>
+                            </div>
+                        </div>
+
+                        <!-- Bouton pour retirer l'icône si on veut un onglet uniquement textuel -->
+                        @if (!string.IsNullOrWhiteSpace(_editingTabIconProductId))
+                        {
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Warning"
+                                       Size="MudBlazor.Size.Small"
+                                       Style="font-size: 0.70rem; text-transform: none;"
+                                       OnClick="ClearEditTabIcon">
+                                Sans icône
+                            </MudButton>
+                        }
+                    </div>
+
+                    <!-- 4. Boutons d'action Annuler / Valider -->
+                    <div class="d-flex justify-end gap-2">
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Default"
+                                   Size="MudBlazor.Size.Small"
+                                   OnClick="CancelEditTab">
+                            Annuler
+                        </MudButton>
+
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="MudBlazor.Size.Small"
+                                   Disabled="@string.IsNullOrWhiteSpace(_editingTabName)"
+                                   OnClick="ConfirmEditTab">
+                            Valider
+                        </MudButton>
+                    </div>
+
+                </div>
+            </MudOverlay>
+
+
         </div>
 
     </div>
@@ -533,6 +684,29 @@
             font-weight: 600;
             box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
         }
+
+        /* Style visuel de l'onglet en cours de déplacement (Drag) */
+        .factory-tab-chip.dragging {
+            opacity: 0.45;
+            border-style: dashed;
+        }
+
+        /* Indicateur visuel sur l'onglet cible lors du survol (Drop) */
+        .factory-tab-chip.drag-over {
+            border-left: 3px solid #38bdf8 !important;
+            background: #2e323b !important;
+            transform: translateX(2px);
+        }
+
+    /* Icône de ressource affichée à gauche du nom de l'onglet */
+    .tab-resource-icon {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+        flex-shrink: 0;
+        user-select: none;
+        -webkit-user-drag: none;
+    }
 
     .tab-action-btn {
         background: transparent;
@@ -826,6 +1000,18 @@
     // =========================================================================
     private List<FactoryTab> Tabs { get; set; } = new();
     private FactoryTab ActiveTab { get; set; } = default!;
+
+    // =========================================================================
+    // VARIABLES POUR LE DÉPLACEMENT (DRAG & DROP) ET L'ÉDITION D'ONGLET
+    // =========================================================================
+    private FactoryTab? _draggedTab;
+    private FactoryTab? _dragOverTab;
+
+    private bool _isEditingTab = false;
+    private FactoryTab? _editingTab;
+    private string _editingTabName = "";
+    private string? _editingTabIconProductId;
+    private Product? _editingTabSelectedProduct;
 
     // Propriété raccourci pointant vers le BlazorDiagram de l'onglet actif
     // Utilise l'opérateur ?. pour renvoyer null sans planter tant que ActiveTab n'est pas prêt
@@ -1323,16 +1509,164 @@
     }
 
 
-    private async Task RenameTab(FactoryTab tab)
+    /// <summary>
+    /// Démarre le glisser-déposer d'un onglet pour changer son ordre dans la barre.
+    /// </summary>
+    private void OnTabDragStart(FactoryTab tab)
     {
-        var newName = await JS.InvokeAsync<string?>("prompt", "Nom de l'onglet (ex: Iron, Steel, Oil) :", tab.Name);
-        if (!string.IsNullOrWhiteSpace(newName))
+        _draggedTab = tab;
+    }
+
+    /// <summary>
+    /// Mémorise l'onglet survolé pendant le glisser-déposer pour afficher l'indicateur visuel.
+    /// </summary>
+    private void OnTabDragOver(FactoryTab targetTab)
+    {
+        if (_draggedTab == null || _draggedTab == targetTab) return;
+        _dragOverTab = targetTab;
+    }
+
+    /// <summary>
+    /// Déplace l'onglet glissé à la position de l'onglet cible lorsqu'on relâche la souris.
+    /// </summary>
+    private void OnTabDrop(FactoryTab targetTab)
+    {
+        if (_draggedTab != null && _draggedTab != targetTab)
         {
-            tab.Name = newName.Trim();
-            FlowEngine.RecalculateFlows(Tabs, ResourceService);
-            StateHasChanged();
+            int oldIndex = Tabs.IndexOf(_draggedTab);
+            int newIndex = Tabs.IndexOf(targetTab);
+
+            if (oldIndex >= 0 && newIndex >= 0)
+            {
+                Tabs.RemoveAt(oldIndex);
+                Tabs.Insert(newIndex, _draggedTab);
+                FlowEngine.RegisterTabs(Tabs);
+            }
+        }
+
+        _draggedTab = null;
+        _dragOverTab = null;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Nettoie l'état du glisser-déposer si l'utilisateur relâche en dehors d'un onglet.
+    /// </summary>
+    private void OnTabDragEnd()
+    {
+        _draggedTab = null;
+        _dragOverTab = null;
+    }
+
+    /// <summary>
+    /// Ouvre la fenêtre modale permettant de choisir une icône de ressource
+    /// et/ou de modifier le nom de l'onglet.
+    /// </summary>
+    private void OpenEditTabModal(FactoryTab tab)
+    {
+        _editingTab = tab;
+        _editingTabName = tab.Name;
+        _editingTabIconProductId = tab.IconProductId;
+
+        // Pré-sélectionne la ressource dans l'autocomplétion si l'onglet en avait déjà une
+        if (!string.IsNullOrWhiteSpace(tab.IconProductId) && ProductDict.TryGetValue(tab.IconProductId, out var existingProd))
+        {
+            _editingTabSelectedProduct = existingProd;
+        }
+        else
+        {
+            _editingTabSelectedProduct = null;
+        }
+
+        _isEditingTab = true;
+    }
+
+    /// <summary>
+    /// Recherche dans la liste complète des ressources pour le sélecteur d'icône d'onglet.
+    /// </summary>
+    private Task<IEnumerable<Product>> SearchTabIconProducts(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Task.FromResult<IEnumerable<Product>>(_allProducts.OrderBy(p => p.Name));
+        }
+
+        var term = value.Trim();
+        var results = _allProducts
+            .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(p => p.Name);
+
+        return Task.FromResult<IEnumerable<Product>>(results);
+    }
+
+    /// <summary>
+    /// Déclenché lorsqu'on choisit une ressource dans la fenêtre d'édition d'onglet :
+    /// applique son icône ET remplit automatiquement le nom de l'onglet avec le nom de la ressource.
+    /// </summary>
+    private void OnEditTabProductSelected(Product? selected)
+    {
+        _editingTabSelectedProduct = selected;
+
+        if (selected != null)
+        {
+            _editingTabIconProductId = selected.Id;
+            // Remplit automatiquement le nom de l'onglet avec le nom lisible de la ressource
+            _editingTabName = !string.IsNullOrWhiteSpace(selected.Name) ? selected.Name : selected.Id;
         }
     }
+
+    /// <summary>
+    /// Retire l'icône sélectionnée dans la fenêtre d'édition tout en conservant le nom saisi.
+    /// </summary>
+    private void ClearEditTabIcon()
+    {
+        _editingTabIconProductId = null;
+        _editingTabSelectedProduct = null;
+    }
+
+    /// <summary>
+    /// Permet de valider la modification de l'onglet en appuyant sur la touche Entrée dans le champ texte.
+    /// </summary>
+    private void HandleEditTabKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter" && !string.IsNullOrWhiteSpace(_editingTabName))
+        {
+            ConfirmEditTab();
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelEditTab();
+        }
+    }
+
+    /// <summary>
+    /// Applique le nouveau nom et la nouvelle icône à l'onglet en cours d'édition.
+    /// </summary>
+    private void ConfirmEditTab()
+    {
+        if (_editingTab != null && !string.IsNullOrWhiteSpace(_editingTabName))
+        {
+            _editingTab.Name = _editingTabName.Trim();
+            _editingTab.IconProductId = _editingTabIconProductId;
+
+            FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        }
+
+        _isEditingTab = false;
+        _editingTab = null;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Ferme la fenêtre d'édition d'onglet sans enregistrer les changements.
+    /// </summary>
+    private void CancelEditTab()
+    {
+        _isEditingTab = false;
+        _editingTab = null;
+    }
+
 
 
     private async Task RemoveTab(FactoryTab tab)
@@ -1824,7 +2158,9 @@
                 var savedTab = new SavedTabData
                 {
                     TabId = tab.Id,
-                    Name = tab.Name
+                    Name = tab.Name,
+                    // Sauvegarde l'icône de ressource choisie pour cet onglet
+                    IconProductId = tab.IconProductId
                 };
 
                 // 1. Sauvegarde des nœuds (machines)
@@ -1985,6 +2321,8 @@
                 {
                     Id = string.IsNullOrWhiteSpace(savedTab.TabId) ? Guid.NewGuid().ToString("N") : savedTab.TabId,
                     Name = string.IsNullOrWhiteSpace(savedTab.Name) ? $"Secteur {t + 1}" : savedTab.Name,
+                    // Restaure l'icône de ressource choisie pour cet onglet
+                    IconProductId = savedTab.IconProductId,
                     Diagram = CreateConfiguredDiagram()
                 };
 

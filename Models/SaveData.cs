@@ -33,6 +33,10 @@ public class SavedTabData
 {
     public string TabId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+
+    // Identifiant de la ressource utilisée comme icône de l'onglet (optionnel)
+    public string? IconProductId { get; set; }
+
     public List<SavedNodeData> Nodes { get; set; } = new();
     public List<SavedStorageData> Storages { get; set; } = new();
     public List<SavedPortalData> Portals { get; set; } = new();

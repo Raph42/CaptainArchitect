@@ -18,6 +18,12 @@ public class FactoryTab
     public string Name { get; set; } = "Factory";
 
     /// <summary>
+    /// Identifiant optionnel du produit/ressource dont l'icône est affichée sur l'onglet (ex: "Iron", "Steel").
+    /// Null si l'onglet n'a pas d'icône attribuée.
+    /// </summary>
+    public string? IconProductId { get; set; }
+
+    /// <summary>
     /// Instance BlazorDiagram propre à cet onglet (conserve zoom, pan, machines, stockages et liens).
     /// </summary>
     public BlazorDiagram Diagram { get; set; } = default!;
