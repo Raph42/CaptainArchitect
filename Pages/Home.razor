@@ -344,10 +344,10 @@
                     <div @key="tab.Id"
                          draggable="true"
                          class="factory-tab-chip @(isActive ? "active" : "") @(isDragging ? "dragging" : "") @(isDragOver ? "drag-over" : "")"
-                         title="Cliquer pour ouvrir • Glisser-déposer pour déplacer l'ordre"
+                         title="Click to open • Drag and drop to change the order"
                          @onclick="@(() => SelectTab(tab.Id))"
                          @ondragstart="@(() => OnTabDragStart(tab))"
-                         @ondragover="@(() => OnTabDragOver(tab))"
+                         @ondragenter="@(() => OnTabDragEnter(tab))"
                          @ondragover:preventDefault="true"
                          @ondrop="@(() => OnTabDrop(tab))"
                          @ondragend="OnTabDragEnd">
@@ -1518,16 +1518,17 @@
     }
 
     /// <summary>
-    /// Mémorise l'onglet survolé pendant le glisser-déposer pour afficher l'indicateur visuel.
+    /// Mémorise l'onglet cible uniquement à l'entrée du curseur (1 seul événement au lieu de 60/sec).
+    /// Évite toute file d'attente de rendu Blazor pendant le déplacement de la souris.
     /// </summary>
-    private void OnTabDragOver(FactoryTab targetTab)
+    private void OnTabDragEnter(FactoryTab targetTab)
     {
-        if (_draggedTab == null || _draggedTab == targetTab) return;
+        if (_draggedTab == null || _draggedTab == targetTab || _dragOverTab == targetTab) return;
         _dragOverTab = targetTab;
     }
 
     /// <summary>
-    /// Déplace l'onglet glissé à la position de l'onglet cible lorsqu'on relâche la souris.
+    /// Déplace instantanément l'onglet glissé à la position de l'onglet cible lorsqu'on relâche la souris.
     /// </summary>
     private void OnTabDrop(FactoryTab targetTab)
     {
@@ -1540,13 +1541,11 @@
             {
                 Tabs.RemoveAt(oldIndex);
                 Tabs.Insert(newIndex, _draggedTab);
-                FlowEngine.RegisterTabs(Tabs);
             }
         }
 
         _draggedTab = null;
         _dragOverTab = null;
-        StateHasChanged();
     }
 
     /// <summary>
