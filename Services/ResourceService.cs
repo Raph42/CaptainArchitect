@@ -106,4 +106,19 @@ public class ResourceService
     }
 
 
+    /// <summary>
+    /// Bilan global cumulé de toutes les ressources sur l'ensemble des onglets.
+    /// </summary>
+    public List<ResourceBalanceItem> GlobalResourceBalances { get; private set; } = new();
+
+    /// <summary>
+    /// Met à jour la liste des bilans de ressources et notifie l'interface.
+    /// </summary>
+    public void UpdateResourceBalances(List<ResourceBalanceItem> balances)
+    {
+        GlobalResourceBalances = balances;
+        // Déclenche le rafraîchissement des composants abonnés
+        OnGlobalStatsChanged?.Invoke();
+    }
+
 }

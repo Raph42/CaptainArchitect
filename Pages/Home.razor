@@ -329,9 +329,9 @@
          @oncontextmenu:preventDefault="true">
 
         <!-- 1. BARRE D'ONGLETS D'USINE + PORTAILS INTER-ONGLETS (BUS) -->
-        <!-- Décalée de 348px quand le tiroir est ouvert (340px) ou 54px quand il est fermé -->
+        <!-- Décalée selon l'ouverture du tiroir gauche (348px) et du tiroir droit (268px) -->
         <div class="factory-tabs-bar d-flex align-center justify-space-between px-2 py-1"
-             style="@(_drawerOpen ? "padding-left: 348px !important;" : "padding-left: 54px !important;")">
+             style="@($"{(_drawerOpen ? "padding-left: 348px !important;" : "padding-left: 54px !important;")} {(_summaryDrawerOpen ? "padding-right: 268px !important;" : "padding-right: 54px !important;")}")">
 
             <!-- Liste horizontale des onglets (réorganisable par glisser-déposer) -->
             <div class="d-flex align-center gap-1 flex-wrap" style="min-width: 0;">
@@ -643,8 +643,132 @@
 
         </div>
 
+
     </div>
+
+    <!-- Bouton flottant en haut à droite pour ouvrir le bilan s'il est fermé -->
+    @if (!_summaryDrawerOpen)
+    {
+        <MudTooltip Text="Bilan de production global" Placement="Placement.Left">
+            <MudIconButton Icon="@Icons.Material.Filled.Analytics"
+                           Color="Color.Info"
+                           OnClick="@ToggleSummaryDrawer"
+                           Class="summary-toggle-btn" />
+        </MudTooltip>
+    }
+
+
+    <!-- Tiroir rétractable ancré à droite -->
+    <MudDrawer @bind-Open="@_summaryDrawerOpen"
+               Anchor="MudBlazor.Anchor.End"
+               ClipMode="DrawerClipMode.Never"
+               Elevation="4"
+               Variant="@DrawerVariant.Persistent"
+               Width="260px"
+               Class="pa-3 bg-dark-drawer d-flex flex-column h-100"
+               Style="border-left: 1px solid #333; z-index: 200;">
+
+        <!-- 1. EN-TÊTE DU BILAN -->
+        <div style="flex-shrink: 0;">
+            <div class="d-flex align-center justify-space-between mb-2">
+                <div class="d-flex align-center gap-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Color="Color.Info" Size="MudBlazor.Size.Small" />
+                    <MudText Typo="Typo.subtitle1" Class="fw-bold" Style="color: #e4e4e7;">
+                        Production Summary
+                    </MudText>
+                </div>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                               Size="MudBlazor.Size.Small"
+                               Color="Color.Default"
+                               OnClick="@ToggleSummaryDrawer"
+                               Title="Close the balance sheet" />
+            </div>
+
+            <!-- Champ de recherche rapide dans le bilan -->
+            <MudTextField @bind-Value="_summaryFilterText"
+                          Placeholder="Filter resources..."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="MudBlazor.Size.Small"
+                          Immediate="true"
+                          Clearable="true"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Class="mb-2 search-autocomplete" />
+
+            <!-- Filtre d'état compact : All / Deficit / Surplus -->
+            <MudToggleGroup T="BalanceFilterMode"
+                            @bind-Value="_balanceFilterMode"
+                            Color="Color.Info"
+                            CheckMark="false"
+                            FixedContent="true"
+                            Size="MudBlazor.Size.Small"
+                            Class="mb-2 w-100 d-flex justify-center mode-toggle-group summary-toggle-group">
+                <MudToggleItem Value="BalanceFilterMode.All" Text="All" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="BalanceFilterMode.Deficit" Text="Deficit" Class="flex-grow-1 text-center" />
+                <MudToggleItem Value="BalanceFilterMode.Surplus" Text="Surplus" Class="flex-grow-1 text-center" />
+            </MudToggleGroup>
+        </div>
+
+        <!-- 2. LISTE DÉFILANTE DES RESSOURCES -->
+        <div class="recipes-list flex-grow-1" style="overflow-y: auto; min-height: 0;">
+            @{
+                var items = FilteredSummaryBalances.ToList();
+            }
+
+            @if (items.Count == 0)
+            {
+                <div class="pa-4 text-center" style="color: #71717a; font-size: 0.85rem;">
+                    No resources passing through the diagram.
+                </div>
+            }
+            else
+            {
+                @foreach (var item in items)
+                {
+                    // Détermination de la classe couleur et du texte formaté pour le bilan net
+                    string netClass = item.NetBalance > 0.01m ? "balance-surplus"
+                                    : item.NetBalance < -0.01m ? "balance-deficit"
+                                    : "balance-neutral";
+
+                    string netFormatted = item.NetBalance > 0.01m ? $"+{item.NetBalance:0.##}/m"
+                                        : item.NetBalance < -0.01m ? $"{item.NetBalance:0.##}/m"
+                                        : "0/m";
+
+                    <div @key="item.ProductId" class="summary-resource-card mb-2 pa-2">
+                        <!-- Ligne supérieure : Icône + Nom + Badge Bilan Net -->
+                        <div class="d-flex align-center justify-space-between mb-1">
+                            <div class="d-flex align-center gap-2" style="min-width: 0;">
+                                <ResourceBadge ProductId="@item.ProductId" />
+                                <span class="summary-prod-name" title="@item.ProductName">@item.ProductName</span>
+                            </div>
+
+                            <!-- Bilan net avec code couleur -->
+                            <span class="balance-badge @netClass">
+                                @netFormatted
+                            </span>
+                        </div>
+
+                        <!-- Ligne inférieure : Production brute totale & Consommation totale -->
+                        <div class="d-flex align-center justify-space-between mt-1 pt-1" style="border-top: 1px solid #3f3f46; font-size: 0.74rem;">
+                            <span style="color: #a1a1aa;">
+                                Prod: <strong style="color: #e4e4e7;">@item.TotalProduced.ToString("0.##")/m</strong>
+                            </span>
+                            <span style="color: #a1a1aa;">
+                                Cons: <strong style="color: #e4e4e7;">@item.TotalConsumed.ToString("0.##")/m</strong>
+                            </span>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+    </MudDrawer>
+
+
+
 </div>
+
 
 
 <style>
@@ -983,6 +1107,111 @@
         shape-rendering: geometricPrecision;
     }
 
+    /* Bouton flottant en haut à droite pour ouvrir le bilan */
+    .summary-toggle-btn {
+        position: absolute;
+        top: 4px;
+        right: 8px;
+        z-index: 100;
+        background: rgba(24, 24, 27, 0.9);
+        border: 1px solid #3f3f46;
+        border-radius: 6px;
+        width: 32px;
+        height: 32px;
+    }
+
+        .summary-toggle-btn:hover {
+            background: #27272a;
+        }
+
+    /* Carte d'une ressource dans le tiroir de bilan */
+    .summary-resource-card {
+        background-color: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 6px;
+        transition: border-color 0.15s ease;
+    }
+
+        .summary-resource-card:hover {
+            border-color: #52525b;
+        }
+
+    .summary-prod-name {
+        color: #f4f4f5;
+        font-size: 0.82rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Badges de bilan net (Surplus / Déficit / Équilibre) */
+    .balance-badge {
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 4px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .balance-surplus {
+        color: #4ade80;
+        background-color: rgba(74, 222, 128, 0.12);
+        border: 1px solid rgba(74, 222, 128, 0.35);
+    }
+
+    .balance-deficit {
+        color: #f87171;
+        background-color: rgba(248, 113, 113, 0.12);
+        border: 1px solid rgba(248, 113, 113, 0.35);
+    }
+
+    .balance-neutral {
+        color: #93c5fd;
+        background-color: rgba(147, 197, 253, 0.10);
+        border: 1px solid rgba(147, 197, 253, 0.30);
+    }
+
+    /* =========================================================================
+           COMPACTAGE DU SÉLECTEUR ALL / DEFICIT / SURPLUS DANS LE BILAN DROIT
+           ========================================================================= */
+    .summary-toggle-group .mud-toggle-item {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        padding: 2px 4px !important;
+    }
+
+        .summary-toggle-group .mud-toggle-item .mud-button-label,
+        .summary-toggle-group .mud-toggle-item .mud-typography {
+            font-size: 0.70rem !important;
+            line-height: 1.2 !important;
+            letter-spacing: 0 !important;
+            text-transform: none !important;
+            white-space: nowrap !important;
+        }
+
+    /* Réduction légère de la taille du nom de ressource dans le panneau de 260px */
+    .summary-prod-name {
+        color: #f4f4f5;
+        font-size: 0.78rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+
+    /* =========================================================================
+       NEUTRALISATION DES CLICS SUR LES FENÊTRES D'INFO (MUDSNACKBAR)
+       Le curseur traverse la notification sans déclencher de fermeture ni bloquer le canvas
+       ========================================================================= */
+    ::deep .mud-snackbar-container,
+    ::deep .mud-snackbar {
+        pointer-events: none !important;
+        cursor: default !important;
+    }
+
 </style>
 
 
@@ -1064,6 +1293,24 @@
     private string _storageFilterText = "";
     private string _portalFilterText = "";
 
+    // =========================================================================
+    // ÉTAT ET FILTRES DU TIROIR DE BILAN DE PRODUCTION (DROITE)
+    // =========================================================================
+    public enum BalanceFilterMode
+    {
+        All,
+        Deficit,
+        Surplus
+    }
+
+    private bool _summaryDrawerOpen = false;
+    private string _summaryFilterText = "";
+    private BalanceFilterMode _balanceFilterMode = BalanceFilterMode.All;
+
+    private void ToggleSummaryDrawer()
+    {
+        _summaryDrawerOpen = !_summaryDrawerOpen;
+    }
 
 
     // =========================================================================
@@ -1466,7 +1713,11 @@
         // 3. Abonnement à l'événement de filtrage de ressource
         ResourceService.OnResourceFilterRequested += HandleResourceFilterRequested;
 
-        // 4. Calcul initial des flux
+        // 4.Rafraîchit le tiroir de bilan droit dès que FlowEngine recalcule
+        // (modification de quantité +/-, pause, changement de recette, ajout/suppression)
+        ResourceService.OnGlobalStatsChanged += HandleGlobalStatsChanged;
+
+        // 5. Calcul initial des flux
         FlowEngine.RecalculateFlows(Tabs, ResourceService);
 
         // Force le re-rendu du tiroir avec les données prêtes
@@ -1477,6 +1728,16 @@
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+
+    /// <summary>
+    /// Déclenche le rafraîchissement de l'interface de Home.razor (notamment le Production Summary Drawer)
+    /// lorsque les statistiques ou les bilans de ressources sont mis à jour par FlowEngine.
+    /// </summary>
+    private void HandleGlobalStatsChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
 
@@ -2048,6 +2309,8 @@
     // Nettoyage de l'événement lors de la destruction du composant
     public void Dispose()
     {
+        // Désabonnement propre pour éviter toute fuite mémoire
+        ResourceService.OnGlobalStatsChanged -= HandleGlobalStatsChanged;
         ResourceService.OnResourceFilterRequested -= HandleResourceFilterRequested;
     }
 
@@ -2475,7 +2738,27 @@
             FlowEngine.RecalculateFlows(Tabs, ResourceService);
             Diagram.Refresh();
 
-            Snackbar.Add($"Diagram successfully loaded ({Tabs.Count} tab(s)) !", Severity.Success);
+            //Snackbar.Add($"Diagram successfully loaded ({Tabs.Count} tab(s)) !", Severity.Success);
+        
+            // =========================================================================
+            // NOTIFICATION DE CHARGEMENT : durée courte (1,5s) et clic désactivé
+            // =========================================================================
+            Snackbar.Add($"Diagram successfully loaded ({Tabs.Count} tab(s)) !", Severity.Success, config =>
+            {
+                // Durée d'affichage réduite à 1,5 seconde (au lieu de 5 secondes par défaut)
+                config.VisibleStateDuration = 1500;
+
+                // Animation d'apparition/disparition rapide (200 ms)
+                config.ShowTransitionDuration = 200;
+                config.HideTransitionDuration = 200;
+
+                // Masque la croix de fermeture sur le bandeau
+                config.ShowCloseIcon = false;
+
+                // Supprime toute action au clic sur la notification
+                config.OnClick = null;
+            });
+        
         }
         catch (Exception ex)
         {
@@ -2489,5 +2772,31 @@
             StateHasChanged();
         }
     }
+
+
+    /// <summary>
+    /// Liste filtrée des ressources affichées dans le tiroir de bilan droit.
+    /// </summary>
+    private IEnumerable<ResourceBalanceItem> FilteredSummaryBalances =>
+        ResourceService.GlobalResourceBalances.Where(item =>
+        {
+            // 1. Filtre texte
+            if (!string.IsNullOrWhiteSpace(_summaryFilterText))
+            {
+                var term = _summaryFilterText.Trim();
+                bool matchesText = item.ProductName.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                                   item.ProductId.Contains(term, StringComparison.OrdinalIgnoreCase);
+                if (!matchesText) return false;
+            }
+
+            // 2. Filtre par état (Déficit / Surplus / Tout)
+            return _balanceFilterMode switch
+            {
+                BalanceFilterMode.Deficit => item.NetBalance < -0.01m,
+                BalanceFilterMode.Surplus => item.NetBalance > 0.01m,
+                _ => true
+            };
+        });
+
 
 }

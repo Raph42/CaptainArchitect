@@ -207,6 +207,66 @@ public static class FlowEngine
         // Notifie l'AppBar (MainLayout) via l'événement dans ResourceService
         resourceService.UpdateGlobalStats(totalWorkers, totalPowerKw);
 
+
+        // 7. Calcul du bilan global par ressource sur TOUTE l'usine (tous onglets cumulés)
+        var balanceDict = new Dictionary<string, ResourceBalanceItem>(StringComparer.OrdinalIgnoreCase);
+
+        // Fonction locale pour récupérer ou initialiser l'entrée d'une ressource
+        ResourceBalanceItem GetOrCreateBalance(string productId)
+        {
+            if (!balanceDict.TryGetValue(productId, out var item))
+            {
+                var prod = resourceService.GetProduct(productId);
+                item = new ResourceBalanceItem
+                {
+                    ProductId = productId,
+                    ProductName = prod?.Name ?? productId
+                };
+                balanceDict[productId] = item;
+            }
+            return item;
+        }
+
+        // On utilise directement allMachines déjà collectée au début de la méthode
+        foreach (var node in allMachines)
+        {
+            // Ignorer les machines en pause
+            if (node.IsPaused) continue;
+
+            // 1. Additionner la production brute réelle en sortie
+            foreach (var output in node.Recipe.Outputs)
+            {
+                if (string.IsNullOrWhiteSpace(output.ProductId)) continue;
+
+                decimal producedRate = node.GetActualProducedRatePerMin(output);
+                if (producedRate > 0m)
+                {
+                    GetOrCreateBalance(output.ProductId).TotalProduced += producedRate;
+                }
+            }
+
+            // 2. Additionner la consommation requise en entrée
+            foreach (var input in node.Recipe.Inputs)
+            {
+                if (string.IsNullOrWhiteSpace(input.ProductId)) continue;
+
+                decimal consumedRate = node.GetInputRatePerMin(input);
+                if (consumedRate > 0m)
+                {
+                    GetOrCreateBalance(input.ProductId).TotalConsumed += consumedRate;
+                }
+            }
+        }
+
+        // Tri par nom de ressource et mise à jour dans ResourceService
+        var sortedBalances = balanceDict.Values
+            .Where(b => b.TotalProduced > 0.001m || b.TotalConsumed > 0.001m)
+            .OrderBy(b => b.ProductName)
+            .ToList();
+
+        resourceService.UpdateResourceBalances(sortedBalances);
+
+
         // Rafraîchit le canevas SVG
         // diagram.Refresh(); // <-- Inutile lors d'un calcul de débit et très coûteux sur une grande usine
 
