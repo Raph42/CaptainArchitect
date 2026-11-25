@@ -649,7 +649,7 @@
     <!-- Bouton flottant en haut à droite pour ouvrir le bilan s'il est fermé -->
     @if (!_summaryDrawerOpen)
     {
-        <MudTooltip Text="Bilan de production global" Placement="Placement.Left">
+        <MudTooltip Text="Overall production summary" Placement="Placement.Left">
             <MudIconButton Icon="@Icons.Material.Filled.Analytics"
                            Color="Color.Info"
                            OnClick="@ToggleSummaryDrawer"
@@ -736,10 +736,16 @@
                                         : "0/m";
 
                     <div @key="item.ProductId" class="summary-resource-card mb-2 pa-2">
+
                         <!-- Ligne supérieure : Icône + Nom + Badge Bilan Net -->
                         <div class="d-flex align-center justify-space-between mb-1">
-                            <div class="d-flex align-center gap-2" style="min-width: 0;">
-                                <ResourceBadge ProductId="@item.ProductId" />
+                            <div class="d-flex align-center gap-2"
+                                 style="min-width: 0;"
+                                 title="Left-click: filter recipes • Right-click: locate the producing machine">
+
+                                <ResourceBadge ProductId="@item.ProductId"
+                                               OnRightClick="@(() => NavigateToNextProducer(item.ProductId))" />
+
                                 <span class="summary-prod-name" title="@item.ProductName">@item.ProductName</span>
                             </div>
 
@@ -2797,6 +2803,109 @@
                 _ => true
             };
         });
+
+
+    // =========================================================================
+    // NAVIGATION CYCLIQUE VERS LES MACHINES PRODUCTRICES (CLIC DROIT BILAN)
+    // =========================================================================
+    private string? _lastLocatedProductId;
+    private int _lastLocatedProducerIndex = -1;
+
+    /// <summary>
+    /// Localise la machine qui produit la ressource demandée sur l'ensemble des onglets,
+    /// bascule sur son onglet, la sélectionne et centre la vue dessus.
+    /// Chaque clic droit consécutif sur la même ressource passe au producteur suivant.
+    /// </summary>
+    private async Task NavigateToNextProducer(string productId)
+    {
+        if (string.IsNullOrWhiteSpace(productId)) return;
+
+        // 1. Collecte toutes les machines actives qui produisent cette ressource (dans l'ordre des onglets)
+        var producers = new List<(FactoryTab Tab, MachineNodeModel Machine)>();
+
+        foreach (var tab in Tabs)
+        {
+            foreach (var machine in tab.Diagram.Nodes.OfType<MachineNodeModel>())
+            {
+                if (machine.IsPaused) continue;
+
+                bool producesResource = machine.Recipe.Outputs.Any(o =>
+                    string.Equals(o.ProductId, productId, StringComparison.OrdinalIgnoreCase) &&
+                    machine.GetActualProducedRatePerMin(o) > 0m);
+
+                if (producesResource)
+                {
+                    producers.Add((tab, machine));
+                }
+            }
+        }
+
+        // Aucun producteur actif trouvé (ex: ressource uniquement importée ou en déficit total)
+        if (producers.Count == 0)
+        {
+            Snackbar.Add("No active machine produces this resource.", Severity.Info, config =>
+            {
+                config.VisibleStateDuration = 1500;
+                config.ShowCloseIcon = false;
+            });
+            return;
+        }
+
+        // 2. Détermine l'index de la cible (incrémente si clic consécutif sur la même ressource)
+        if (string.Equals(_lastLocatedProductId, productId, StringComparison.OrdinalIgnoreCase))
+        {
+            _lastLocatedProducerIndex = (_lastLocatedProducerIndex + 1) % producers.Count;
+        }
+        else
+        {
+            _lastLocatedProductId = productId;
+            _lastLocatedProducerIndex = 0;
+        }
+
+        var (targetTab, targetMachine) = producers[_lastLocatedProducerIndex];
+
+        // 3. Bascule vers l'onglet de la machine si ce n'est pas l'onglet actif
+        if (ActiveTab?.Id != targetTab.Id)
+        {
+            SelectTab(targetTab.Id);
+            StateHasChanged();
+            await Task.Yield();
+        }
+
+        // 4. Désélectionne les autres nœuds et sélectionne la machine cible
+        targetTab.Diagram.UnselectAll();
+        targetTab.Diagram.SelectModel(targetMachine, unselectOthers: true);
+
+        // 5. Centre la caméra du diagramme sur la machine cible
+        CenterCameraOnNode(targetTab.Diagram, targetMachine);
+    }
+
+    /// <summary>
+    /// Déplace le panoramique (Pan) du diagramme pour placer le centre du nœud
+    /// au milieu de la fenêtre visible (en tenant compte du zoom actuel).
+    /// </summary>
+    private void CenterCameraOnNode(BlazorDiagram diagram, NodeModel node)
+    {
+        // Dimensions réelles du nœud ou valeurs par défaut de MachineNodeWidget (330x160)
+        double nodeWidth = node.Size?.Width ?? 330.0;
+        double nodeHeight = node.Size?.Height ?? 160.0;
+
+        // Centre géométrique du nœud dans le repère du diagramme
+        double nodeCenterX = node.Position.X + (nodeWidth / 2.0);
+        double nodeCenterY = node.Position.Y + (nodeHeight / 2.0);
+
+        // Dimensions visibles du conteneur du canvas
+        double canvasWidth = diagram.Container?.Width ?? 1200.0;
+        double canvasHeight = diagram.Container?.Height ?? 800.0;
+
+        // Formule inverse du centrage : Pan = (CentreÉcran) - (CentreNœud * Zoom)
+        double zoom = diagram.Zoom;
+        double newPanX = (canvasWidth / 2.0) - (nodeCenterX * zoom);
+        double newPanY = (canvasHeight / 2.0) - (nodeCenterY * zoom);
+
+        diagram.SetPan(newPanX, newPanY);
+        diagram.Refresh();
+    }
 
 
 }

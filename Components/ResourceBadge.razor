@@ -3,42 +3,53 @@
 @using CaptainArchitect.Services
 @inject ResourceService ResourceService
 
+<!-- Infobulle native avec titre et repli (fallback) géré en C# sans JS inline -->
 <MudTooltip Text="@TooltipText" Placement="Placement.Top" Arrow="true" Delay="150">
-    <!-- Ajout de l'événement @onclick et d'un curseur pointeur -->
-    <div class="resource-badge" @onclick="OnClickBadge" @onclick:stopPropagation="true">
-        <img src="@ImagePath" 
-             alt="@TooltipText" 
-             class="resource-icon"
-             loading="lazy"
-             decoding="async"
-             draggable="false"
-             onload="this.style.display='block'; this.nextElementSibling.style.display='none';"
-             onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" />
-        <!-- Repli textuel si l'image n'est pas trouvée -->
-        <span class="resource-fallback" style="display:none;">@FallbackName</span>
+    <div class="resource-badge"
+         @onclick="OnClickBadge"
+         @onclick:stopPropagation="true"
+         @oncontextmenu="HandleRightClick"
+         @oncontextmenu:preventDefault="true"
+         @oncontextmenu:stopPropagation="true">
+
+        @if (!_imageFailed)
+        {
+            <!-- Affichage de l'icône tant qu'aucune erreur de chargement n'est survenue -->
+            <img src="@ImagePath"
+                 alt="@TooltipText"
+                 class="resource-icon"
+                 loading="lazy"
+                 draggable="false"
+                 @onload="OnImageLoaded"
+                 @onerror="OnImageError" />
+        }
+        else
+        {
+            <!-- Affichage des 3 premières lettres en secours si l'image est introuvable (404) -->
+            <span class="resource-fallback">@FallbackName</span>
+        }
     </div>
 </MudTooltip>
-
 
 <style>
     .resource-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 36px;  /* Augmenté (ex: de 26px à 36px) */
-        height: 36px; /* Augmenté (ex: de 26px à 36px) */
+        width: 30px;
+        height: 30px;
         border-radius: 4px;
         background: #1e1e1e;
         border: 1px solid #444;
         padding: 2px;
-        cursor: pointer; /* Indique clairement que c'est cliquable */
+        cursor: pointer;
         transition: transform 0.1s ease, border-color 0.2s ease;
     }
 
-    .resource-badge:hover {
-        border-color: #3b82f6;
-        transform: scale(1.1); /* Petit zoom sympa au survol */
-    }
+        .resource-badge:hover {
+            border-color: #38bdf8;
+            transform: scale(1.1);
+        }
 
     .resource-icon {
         width: 100%;
@@ -52,54 +63,86 @@
         font-size: 0.65rem;
         color: #ddd;
         text-transform: uppercase;
+        font-weight: bold;
     }
 </style>
-
-
-
 
 @code {
     [Parameter, EditorRequired] public string ProductId { get; set; } = string.Empty;
     [Parameter] public string? ResourceId { get; set; }
 
-    // Direction du port (Input ou Output). Null si affiché dans le tiroir de gauche
+    // Direction du port (Input ou Output). Null si affiché dans un panneau latéral
     [Parameter] public PortDirection? Direction { get; set; }
 
-    private string EffectiveId => 
+    // Callback optionnel déclenché lors d'un clic droit sur l'icône
+    [Parameter] public EventCallback OnRightClick { get; set; }
+
+    // État interne pour basculer proprement entre l'image et les 3 lettres de secours
+    private bool _imageFailed = false;
+    private string? _lastProductId;
+
+    private string EffectiveId =>
         !string.IsNullOrWhiteSpace(ProductId) ? ProductId : (ResourceId ?? string.Empty);
 
-    private Product? Prod => ResourceService.GetProduct(ProductId);
+    // Réinitialise l'état d'erreur si le composant est réutilisé pour un autre produit
+    protected override void OnParametersSet()
+    {
+        if (!string.Equals(_lastProductId, EffectiveId, StringComparison.OrdinalIgnoreCase))
+        {
+            _lastProductId = EffectiveId;
+            _imageFailed = false;
+        }
+    }
 
+    // Recherche dans ResourceService via GetProduct
+    private Product? Prod => ResourceService.GetProduct(EffectiveId);
 
     // 1. Image : utilise le chemin exact défini dans le JSON, ou repli par défaut
     private string ImagePath
     {
         get
         {
-            var path = !string.IsNullOrWhiteSpace(Prod?.Image)
+            var raw = !string.IsNullOrWhiteSpace(Prod?.Image)
                 ? Prod.Image
-                : $"images/resources/{ProductId}.png";
+                : $"images/resources/{EffectiveId}.png";
 
             // Supprime le slash initial éventuel pour rester relatif à la base du site
-            return path.TrimStart('/');
+            return raw.TrimStart('/');
         }
     }
 
     // 2. Nom : utilise le vrai nom du JSON (ex: "Acid", "Iron Ore")
     private string TooltipText =>
-        Prod?.Name ?? ProductId;
+        !string.IsNullOrWhiteSpace(Prod?.Name) ? Prod.Name : EffectiveId;
 
     // 3. Trois premières lettres pour le secours
     private string FallbackName =>
-        (Prod?.Name ?? ProductId).Substring(0, Math.Min(3, (Prod?.Name ?? ProductId).Length));
+        (!string.IsNullOrWhiteSpace(TooltipText) ? TooltipText : "???")
+            .Substring(0, Math.Min(3, TooltipText.Length));
 
-    // Déclenché au clic sur l'icône de la ressource
+    // Gestionnaires Blazor natifs (remplacent onload/onerror JS inline)
+    private void OnImageLoaded()
+    {
+        _imageFailed = false;
+    }
+
+    private void OnImageError()
+    {
+        _imageFailed = true;
+    }
+
+    // Déclenché au clic gauche sur l'icône de la ressource
     private void OnClickBadge()
     {
-        // On transmet toujours le clic :
-        // - Si Direction a une valeur (badge sur une machine), elle est transmise
-        // - Si Direction est null (badge dans le panneau latéral), null est transmis
         ResourceService.SelectFilterResource(EffectiveId, Direction);
     }
 
+    // Déclenché au clic droit sur l'icône de la ressource
+    private async Task HandleRightClick()
+    {
+        if (OnRightClick.HasDelegate)
+        {
+            await OnRightClick.InvokeAsync();
+        }
+    }
 }
