@@ -24,7 +24,8 @@
    @onpointerdown="OnLinkPointerDown"
    @ondblclick="OnDoubleClick"
    @oncontextmenu="OnRightClick"
-   @oncontextmenu:preventDefault="true">
+   @oncontextmenu:preventDefault="true"
+   @oncontextmenu:stopPropagation="true">
 
     <!-- Infobulle native au survol du câble -->
     <title>Double-clic : ajouter un point | Clic droit : supprimer un point ou le tuyau</title>

@@ -468,7 +468,14 @@
         </div>
 
         <!-- 2. ZONE DU CANVAS DE L'ONGLET ACTIF -->
-        <div class="flex-grow-1 w-100 position-relative" style="min-height: 0; overflow: hidden;">
+        <div class="flex-grow-1 w-100 position-relative"
+             style="min-height: 0; overflow: hidden;"
+             @onpointerdown="OnCanvasPointerDown"
+             @onpointermove="OnCanvasPointerMove"
+             @onpointerup="OnCanvasPointerUp"
+             @oncontextmenu="OnCanvasContextMenu"
+             @oncontextmenu:preventDefault="true">
+
             @if (Diagram != null)
             {
                 <CascadingValue Value="Diagram">
@@ -480,6 +487,200 @@
                     </CascadingValue>
                 </CascadingValue>
             }
+
+            <!-- Rectangle visuel de multi-sélection (affiché pendant Shift + maintien clic gauche) -->
+            @if (_isBoxSelecting)
+            {
+                <div class="selection-marquee-box" style="@SelectionBoxStyle"></div>
+            }
+
+
+<!-- =========================================================================
+                 MENU CONTEXTUEL FAÇON WINDOWS (CLIC DROIT SUR LE DIAGRAMME)
+                 ========================================================================= -->
+            @if (_contextMenuVisible)
+            {
+                <!-- Fond transparent pour fermer le menu si l'utilisateur clique à côté -->
+                <div class="win-context-backdrop"
+                     @onpointerdown="CloseContextMenu"
+                     @oncontextmenu="CloseContextMenu"
+                     @oncontextmenu:preventDefault="true">
+                </div>
+
+                <!-- Fenêtre du menu contextuel positionnée au niveau du curseur -->
+                <div class="win-context-menu"
+                     style="@ContextMenuStyle"
+                     @onpointerdown:stopPropagation="true"
+                     @oncontextmenu:preventDefault="true"
+                     @oncontextmenu:stopPropagation="true">
+
+                    <!-- 1. Option d'aide tout en haut -->
+                    <button type="button"
+                            class="win-context-item"
+                            @onclick="OpenHelpFromContextMenu">
+                        <span class="win-context-left">
+                            <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Size="MudBlazor.Size.Small" Style="color: #38bdf8; font-size: 16px;" />
+                            <span>Help &amp; Controls</span>
+                        </span>
+                        <span class="win-context-shortcut">F1</span>
+                    </button>
+
+                    <div class="win-context-separator"></div>
+
+                    <!-- 2. Copier (actif uniquement si au moins un nœud est sélectionné) -->
+                    <button type="button"
+                            class="win-context-item"
+                            disabled="@(!CanCopyOrCut)"
+                            @onclick="CopyFromContextMenu">
+                        <span class="win-context-left">
+                            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="MudBlazor.Size.Small" Style="font-size: 15px;" />
+                            <span>Copy</span>
+                        </span>
+                        <span class="win-context-shortcut">Ctrl+C</span>
+                    </button>
+
+                    <!-- 3. Couper (actif uniquement si au moins un nœud ou lien est sélectionné) -->
+                    <button type="button"
+                            class="win-context-item"
+                            disabled="@(!CanDeleteSelection)"
+                            @onclick="CutFromContextMenu">
+                        <span class="win-context-left">
+                            <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="MudBlazor.Size.Small" Style="font-size: 15px;" />
+                            <span>Cut</span>
+                        </span>
+                        <span class="win-context-shortcut">Ctrl+X</span>
+                    </button>
+
+                    <!-- 4. Coller (actif uniquement si le presse-papiers contient une copie) -->
+                    <button type="button"
+                            class="win-context-item"
+                            disabled="@(!CanPaste)"
+                            @onclick="PasteFromContextMenu">
+                        <span class="win-context-left">
+                            <MudIcon Icon="@Icons.Material.Filled.ContentPaste" Size="MudBlazor.Size.Small" Style="font-size: 15px;" />
+                            <span>Paste</span>
+                        </span>
+                        <span class="win-context-shortcut">Ctrl+V</span>
+                    </button>
+
+                    <div class="win-context-separator"></div>
+
+                    <!-- 5. Supprimer (actif uniquement si au moins un nœud ou lien est sélectionné) -->
+                    <button type="button"
+                            class="win-context-item danger"
+                            disabled="@(!CanDeleteSelection)"
+                            @onclick="DeleteFromContextMenu">
+                        <span class="win-context-left">
+                            <MudIcon Icon="@Icons.Material.Filled.DeleteOutline" Size="MudBlazor.Size.Small" Style="font-size: 16px;" />
+                            <span>Delete</span>
+                        </span>
+                        <span class="win-context-shortcut">Del</span>
+                    </button>
+
+                </div>
+            }
+
+
+            <!-- =========================================================================
+                 FENÊTRE MODALE D'AIDE DES COMMANDES (HELP & CONTROLS)
+                 ========================================================================= -->
+            <MudOverlay Visible="@_isHelpModalOpen"
+                        DarkBackground="true"
+                        Absolute="true"
+                        ZIndex="1200">
+                <div class="pa-5 rounded-lg"
+                     style="background: #27272a; border: 1px solid #3f3f46; width: 520px; max-width: 94vw; max-height: 85vh; overflow-y: auto; box-shadow: 0 14px 35px rgba(0,0,0,0.8); color: #f4f4f5;"
+                     @onclick:stopPropagation="true"
+                     @onkeydown:stopPropagation="true">
+
+                    <!-- En-tête de la fenêtre d'aide -->
+                    <div class="d-flex align-center justify-space-between mb-3 pb-2" style="border-bottom: 1px solid #3f3f46;">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Color="Color.Info" />
+                            <MudText Typo="Typo.h6" Style="color: #38bdf8; font-weight: 600;">
+                                Diagram Controls &amp; Shortcuts
+                            </MudText>
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                       Size="MudBlazor.Size.Small"
+                                       Color="Color.Default"
+                                       OnClick="@(() => _isHelpModalOpen = false)" />
+                    </div>
+
+                    <!-- Section 1 : Souris & Sélection -->
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #38bdf8; font-weight: 700;">
+                        Mouse &amp; Selection
+                    </MudText>
+                    <div class="help-grid mb-4">
+                        <div class="help-key">Left-Click + Drag (Canvas)</div>
+                        <div class="help-desc">Pan / move around the factory diagram.</div>
+
+                        <div class="help-key">Mouse Wheel</div>
+                        <div class="help-desc">Zoom in and out on the diagram.</div>
+
+                        <div class="help-key">Left-Click (Item / Pipe)</div>
+                        <div class="help-desc">Select a machine, storage, portal, or pipe.</div>
+
+                        <div class="help-key">Shift + Left-Click + Drag</div>
+                        <div class="help-desc">Draw a selection box to multi-select items and pipes.</div>
+
+                        <div class="help-key">Right-Click (Canvas)</div>
+                        <div class="help-desc">Open this context menu (Help, Copy, Cut, Paste, Delete).</div>
+                    </div>
+
+                    <!-- Section 2 : Tuyaux & Connexions -->
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #38bdf8; font-weight: 700;">
+                        Pipes &amp; Flow Routing
+                    </MudText>
+                    <div class="help-grid mb-4">
+                        <div class="help-key">Drag from Output Port</div>
+                        <div class="help-desc">Connect a resource output to a matching input port.</div>
+
+                        <div class="help-key">Double-Click on Pipe</div>
+                        <div class="help-desc">Add a waypoint handle to bend the pipe path.</div>
+
+                        <div class="help-key">Drag Flow Badge / Handle</div>
+                        <div class="help-desc">Reshape the pipe curve freely.</div>
+
+                        <div class="help-key">Right-Click on Handle / Pipe</div>
+                        <div class="help-desc">Remove the waypoint handle (or delete the pipe).</div>
+                    </div>
+
+                    <!-- Section 3 : Raccourcis Clavier & Bilan -->
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #38bdf8; font-weight: 700;">
+                        Keyboard Shortcuts &amp; Summary
+                    </MudText>
+                    <div class="help-grid mb-4">
+                        <div class="help-key">Ctrl + C / Ctrl + X</div>
+                        <div class="help-desc">Copy or Cut selected machines and their internal pipes.</div>
+
+                        <div class="help-key">Ctrl + V</div>
+                        <div class="help-desc">Paste copied items into the active tab.</div>
+
+                        <div class="help-key">Ctrl + D</div>
+                        <div class="help-desc">Duplicate the selected item(s) immediately.</div>
+
+                        <div class="help-key">Delete / Backspace</div>
+                        <div class="help-desc">Delete selected items or pipes (with confirmation).</div>
+
+                        <div class="help-key">Right-Click Resource Icon</div>
+                        <div class="help-desc">In the right Production Summary, jump to each producer in a loop.</div>
+                    </div>
+
+                    <!-- Bouton Fermer -->
+                    <div class="d-flex justify-end">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="MudBlazor.Size.Small"
+                                   OnClick="@(() => _isHelpModalOpen = false)">
+                            Close
+                        </MudButton>
+                    </div>
+
+                </div>
+            </MudOverlay>
+
+
 
             <!-- Overlay d'avancement du chargement de la sauvegarde -->
             <MudOverlay Visible="@_isLoadingDiagram"
@@ -1218,6 +1419,126 @@
         cursor: default !important;
     }
 
+    /* =========================================================================
+       RECTANGLE DE MULTI-SÉLECTION (SHIFT + MAINTIEN CLIC SOURIS)
+       ========================================================================= */
+    .selection-marquee-box {
+        position: absolute;
+        border: 1.5px dashed #38bdf8;
+        background-color: rgba(56, 189, 248, 0.16);
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+        pointer-events: none;
+        z-index: 45;
+    }
+
+    /* =========================================================================
+           MENU CONTEXTUEL FAÇON WINDOWS (CLIC DROIT SUR LE DIAGRAMME)
+           ========================================================================= */
+    .win-context-backdrop {
+        position: absolute;
+        inset: 0;
+        z-index: 240;
+        background: transparent;
+    }
+
+    .win-context-menu {
+        position: absolute;
+        z-index: 250;
+        min-width: 215px;
+        padding: 4px;
+        background-color: #252529;
+        border: 1px solid #45454d;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        user-select: none;
+    }
+
+    .win-context-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        width: 100%;
+        padding: 6px 10px;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        color: #f4f4f5;
+        font-size: 0.80rem;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.1s ease;
+    }
+
+        .win-context-item:hover:not(:disabled) {
+            background-color: #38bdf826;
+            color: #ffffff;
+        }
+
+        .win-context-item.danger:hover:not(:disabled) {
+            background-color: rgba(239, 68, 68, 0.22);
+            color: #fca5a5;
+        }
+
+        /* État désactivé façon Windows (grisé et non cliquable) */
+        .win-context-item:disabled {
+            color: #6b7280;
+            cursor: default;
+            opacity: 0.65;
+        }
+
+    .win-context-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .win-context-shortcut {
+        font-size: 0.72rem;
+        color: #9ca3af;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .win-context-item:disabled .win-context-shortcut {
+        color: #52525b;
+    }
+
+    .win-context-separator {
+        height: 1px;
+        margin: 3px 6px;
+        background-color: #3f3f46;
+    }
+
+    /* Grille de présentation des raccourcis dans la fenêtre Help */
+    .help-grid {
+        display: grid;
+        grid-template-columns: 195px 1fr;
+        gap: 6px 12px;
+        align-items: center;
+        font-size: 0.80rem;
+    }
+
+    /* Badges des raccourcis clavier/souris dans la fenêtre Help & Controls */
+    .help-key {
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        border-bottom-width: 2px; /* Effet touche de clavier */
+        border-radius: 4px;
+        padding: 3px 8px;
+        /* Cyan clair très lisible sur fond sombre (ou #fbbf24 pour jaune doré) */
+        color: #778CFC;
+        font-weight: 600;
+        font-size: 0.74rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .help-desc {
+        color: #a1a1aa;
+    }
+
 </style>
 
 
@@ -1329,6 +1650,126 @@
             _failedRecentImages.Add(productId);
         }
     }
+
+
+
+    // =========================================================================
+    // MENU CONTEXTUEL FAÇON WINDOWS (CLIC DROIT SUR DIAGRAMME) & AIDE
+    // =========================================================================
+    private bool _contextMenuVisible = false;
+    private double _contextMenuX;
+    private double _contextMenuY;
+    private bool _isHelpModalOpen = false;
+
+    // État dynamique d'activation des commandes du menu contextuel
+    private bool CanCopyOrCut => Diagram != null && Diagram.Nodes.Any(n => n.Selected);
+    private bool CanDeleteSelection => Diagram != null && (Diagram.Nodes.Any(n => n.Selected) || Diagram.Links.Any(l => l.Selected));
+    private bool CanPaste => _clipboard != null && (_clipboard.Machines.Count > 0 || _clipboard.Storages.Count > 0 || _clipboard.Portals.Count > 0);
+
+    private string ContextMenuStyle =>
+        FormattableString.Invariant($"left: {_contextMenuX:0.##}px; top: {_contextMenuY:0.##}px;");
+
+    /// <summary>
+    /// Ouvre le menu contextuel façon Windows à l'emplacement du curseur sur le diagramme.
+    /// </summary>
+    private void OnCanvasContextMenu(MouseEventArgs e)
+    {
+        if (Diagram == null) return;
+
+        // Position relative au conteneur du canvas avec maintien dans les bords visibles
+        double maxWidth = (Diagram.Container?.Width ?? 1000.0) - 225.0;
+        double maxHeight = (Diagram.Container?.Height ?? 700.0) - 210.0;
+
+        _contextMenuX = Math.Clamp(e.OffsetX, 8.0, Math.Max(8.0, maxWidth));
+        _contextMenuY = Math.Clamp(e.OffsetY, 8.0, Math.Max(8.0, maxHeight));
+        _contextMenuVisible = true;
+    }
+
+    private void CloseContextMenu()
+    {
+        _contextMenuVisible = false;
+    }
+
+    private void OpenHelpFromContextMenu()
+    {
+        _contextMenuVisible = false;
+        _isHelpModalOpen = true;
+    }
+
+    private void CopyFromContextMenu()
+    {
+        _contextMenuVisible = false;
+        CopySelectionToClipboard(showNotification: true);
+    }
+
+    private void CutFromContextMenu()
+    {
+        _contextMenuVisible = false;
+        CutSelectionToClipboard();
+    }
+
+    private async Task PasteFromContextMenu()
+    {
+        _contextMenuVisible = false;
+        await PasteFromClipboard();
+    }
+
+    private async Task DeleteFromContextMenu()
+    {
+        _contextMenuVisible = false;
+        await DeleteSelectedItemsAsync();
+    }
+
+    /// <summary>
+    /// Supprime les éléments sélectionnés (nœuds et/ou liens) après confirmation MudBlazor.
+    /// Partagée entre la touche Delete/Backspace et le menu contextuel.
+    /// </summary>
+    private async Task DeleteSelectedItemsAsync()
+    {
+        if (Diagram == null) return;
+
+        var selectedLinks = Diagram.Links.Where(l => l.Selected).ToList();
+        var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
+
+        if (selectedLinks.Count == 0 && selectedNodes.Count == 0) return;
+
+        string message;
+        if (selectedNodes.Count == 1 && selectedLinks.Count == 0)
+        {
+            message = "Delete the item ?";
+        }
+        else if (selectedNodes.Count > 1)
+        {
+            message = $"Delete these {selectedNodes.Count} selected items ?";
+        }
+        else
+        {
+            message = selectedLinks.Count == 1
+                ? "Delete the link ?"
+                : $"Delete these {selectedLinks.Count} links ?";
+        }
+
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            title: "Delete",
+            message: message,
+            yesText: "Delete",
+            cancelText: "Cancel"
+        );
+
+        if (confirm != true) return;
+
+        foreach (var link in selectedLinks)
+        {
+            Diagram.Links.Remove(link);
+        }
+
+        foreach (var node in selectedNodes)
+        {
+            Diagram.Nodes.Remove(node);
+        }
+    }
+
+
 
 
     // =========================================================================
@@ -1723,6 +2164,9 @@
         // (modification de quantité +/-, pause, changement de recette, ajout/suppression)
         ResourceService.OnGlobalStatsChanged += HandleGlobalStatsChanged;
 
+        // Abonnement au clic sur l'icône d'aide (?) située dans la barre supérieure MainLayout
+        ResourceService.OnHelpRequested += HandleHelpRequested;
+
         // 5. Calcul initial des flux
         FlowEngine.RecalculateFlows(Tabs, ResourceService);
 
@@ -1743,6 +2187,18 @@
     /// </summary>
     private void HandleGlobalStatsChanged()
     {
+        InvokeAsync(StateHasChanged);
+    }
+
+
+    /// <summary>
+    /// Ouvre la fenêtre modale d'aide (Help & Controls) lorsque l'utilisateur clique
+    /// sur l'icône point d'interrogation à gauche du titre CaptainArchitect.
+    /// </summary>
+    private void HandleHelpRequested()
+    {
+        _contextMenuVisible = false;
+        _isHelpModalOpen = true;
         InvokeAsync(StateHasChanged);
     }
 
@@ -2119,69 +2575,74 @@
 
 
     /// <summary>
-    /// Gère la suppression avec confirmation pour les liens (touches Delete et Backspace)
-    /// ainsi que la duplication (Ctrl + D).
+    /// Gère les raccourcis clavier sur le diagramme :
+    /// - Delete / Backspace : Suppression avec confirmation
+    /// - Ctrl + C : Copier la sélection (machines, stockages, portails et liens internes)
+    /// - Ctrl + X : Couper la sélection
+    /// - Ctrl + V : Coller la sélection dans l'onglet actif
+    /// - Ctrl + D : Dupliquer la sélection
     /// </summary>
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        if (Diagram == null) return;
+
         // 1. Suppression des nœuds ou liens sélectionnés (Delete ou Backspace)
         if (e.Key is "Delete" or "Backspace")
         {
-            var selectedLinks = Diagram.Links.Where(l => l.Selected).ToList();
+            await DeleteSelectedItemsAsync();
+        }
+        // Touche F1 : ouvre/ferme la fenêtre d'aide des commandes
+        else if (e.Key == "F1")
+        {
+            _contextMenuVisible = false;
+            _isHelpModalOpen = !_isHelpModalOpen;
+        }
+        // Touche Échap : ferme le menu contextuel ou l'aide
+        else if (e.Key == "Escape")
+        {
+            _contextMenuVisible = false;
+            _isHelpModalOpen = false;
+        }
+
+
+        // 2. Duplication par raccourci Ctrl + D
+        // else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
+        // {
+        //     var selectedNode = Diagram.Nodes.FirstOrDefault(n => n.Selected);
+
+        //     if (selectedNode != null)
+        //     {
+        //         await DuplicateNode(selectedNode);
+        //     }
+        // }
+
+        // 2. Copier la sélection (Ctrl + C)
+        else if ((e.CtrlKey || e.MetaKey) && (e.Key is "c" or "C"))
+        {
+            CopySelectionToClipboard(showNotification: true);
+        }
+        // 3. Couper la sélection (Ctrl + X)
+        else if ((e.CtrlKey || e.MetaKey) && (e.Key is "x" or "X"))
+        {
+            CutSelectionToClipboard();
+        }
+        // 4. Coller la sélection (Ctrl + V)
+        else if ((e.CtrlKey || e.MetaKey) && (e.Key is "v" or "V"))
+        {
+            await PasteFromClipboard();
+        }
+        // 5. Duplication rapide (Ctrl + D) : fonctionne désormais aussi sur une multi-sélection
+        else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
+        {
             var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
-
-            // Si aucun élément n'est sélectionné, on ne fait rien
-            if (selectedLinks.Count == 0 && selectedNodes.Count == 0) return;
-
-            // Construction d'un message adapté à la sélection (machines et/ou tuyaux)
-            string message;
-
-            if (selectedNodes.Count == 1 && selectedLinks.Count == 0)
+            if (selectedNodes.Count == 1)
             {
-                message = "Delete the item ?";
+                await DuplicateNode(selectedNodes[0]);
             }
             else if (selectedNodes.Count > 1)
             {
-                message = $"Delete this {selectedNodes.Count} selected items ?";
-            }
-            else
-            {
-                message = selectedLinks.Count == 1
-                    ? "Delete the link ?"
-                    : $"Delete these {selectedLinks.Count} links ?";
-            }
-
-            // Ouverture de la boîte de dialogue MudBlazor (syntaxe asynchrone v7+)
-            bool? confirm = await DialogService.ShowMessageBoxAsync(
-                title: "Delete",
-                message: message,
-                yesText: "Delete",
-                cancelText: "Cancel"
-            );
-
-            // Si l'utilisateur clique sur "Annuler" ou ferme la fenêtre, on stoppe tout
-            if (confirm != true) return;
-
-            // Suppression des liens sélectionnés
-            foreach (var link in selectedLinks)
-            {
-                Diagram.Links.Remove(link);
-            }
-
-            // Suppression des nœuds sélectionnés
-            foreach (var node in selectedNodes)
-            {
-                Diagram.Nodes.Remove(node);
-            }
-        }
-        // 2. Duplication par raccourci Ctrl + D
-        else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
-        {
-            var selectedNode = Diagram.Nodes.FirstOrDefault(n => n.Selected);
-
-            if (selectedNode != null)
-            {
-                await DuplicateNode(selectedNode);
+                CopySelectionToClipboard(showNotification: false);
+                await PasteFromClipboard();
             }
         }
 
@@ -2318,6 +2779,7 @@
         // Désabonnement propre pour éviter toute fuite mémoire
         ResourceService.OnGlobalStatsChanged -= HandleGlobalStatsChanged;
         ResourceService.OnResourceFilterRequested -= HandleResourceFilterRequested;
+        ResourceService.OnHelpRequested -= HandleHelpRequested;
     }
 
 
@@ -2905,6 +3367,421 @@
 
         diagram.SetPan(newPanX, newPanY);
         diagram.Refresh();
+    }
+
+
+    // =========================================================================
+    // MULTI-SÉLECTION AU RECTANGLE (SHIFT + MAINTIEN CLIC GAUCHE SOURIS)
+    // =========================================================================
+    private bool _isBoxSelecting = false;
+    private double _boxStartClientX;
+    private double _boxStartClientY;
+    private double _boxCurrentClientX;
+    private double _boxCurrentClientY;
+
+    // Position relative au conteneur du canvas pour dessiner le cadre visuel
+    private double _boxStartRelX;
+    private double _boxStartRelY;
+    private double _boxCurrentRelX;
+    private double _boxCurrentRelY;
+
+    private string SelectionBoxStyle
+    {
+        get
+        {
+            double left = Math.Min(_boxStartRelX, _boxCurrentRelX);
+            double top = Math.Min(_boxStartRelY, _boxCurrentRelY);
+            double width = Math.Abs(_boxCurrentRelX - _boxStartRelX);
+            double height = Math.Abs(_boxCurrentRelY - _boxStartRelY);
+            return FormattableString.Invariant($"left: {left:0.##}px; top: {top:0.##}px; width: {width:0.##}px; height: {height:0.##}px;");
+        }
+    }
+
+    private void OnCanvasPointerDown(PointerEventArgs e)
+    {
+        if (Diagram == null) return;
+
+        // Démarre la sélection au rectangle uniquement si Shift est maintenu + clic gauche
+        if (e.ShiftKey && e.Button == 0)
+        {
+            // Désactive temporairement le déplacement de la carte (Panning) pendant le tracé du cadre
+            Diagram.Options.AllowPanning = false;
+
+            _isBoxSelecting = true;
+            _boxStartClientX = _boxCurrentClientX = e.ClientX;
+            _boxStartClientY = _boxCurrentClientY = e.ClientY;
+            _boxStartRelX = _boxCurrentRelX = e.OffsetX;
+            _boxStartRelY = _boxCurrentRelY = e.OffsetY;
+        }
+    }
+
+    private void OnCanvasPointerMove(PointerEventArgs e)
+    {
+        if (!_isBoxSelecting || Diagram == null) return;
+
+        // Sécurité : si le bouton gauche a été relâché hors du cadre
+        if (e.Buttons == 0)
+        {
+            FinishBoxSelection();
+            return;
+        }
+
+        // Met à jour la taille du rectangle visuel
+        _boxCurrentRelX += (e.ClientX - _boxCurrentClientX);
+        _boxCurrentRelY += (e.ClientY - _boxCurrentClientY);
+        _boxCurrentClientX = e.ClientX;
+        _boxCurrentClientY = e.ClientY;
+    }
+
+    private void OnCanvasPointerUp(PointerEventArgs e)
+    {
+        if (!_isBoxSelecting) return;
+        FinishBoxSelection();
+    }
+
+    private void FinishBoxSelection()
+    {
+        _isBoxSelecting = false;
+
+        if (Diagram == null) return;
+
+        // Réactive immédiatement le déplacement normal du canvas
+        Diagram.Options.AllowPanning = true;
+
+        // Conversion des deux coins écran du rectangle en coordonnées du diagramme (gère Zoom + Pan)
+        var p1 = Diagram.GetRelativeMousePoint(_boxStartClientX, _boxStartClientY);
+        var p2 = Diagram.GetRelativeMousePoint(_boxCurrentClientX, _boxCurrentClientY);
+
+        double minX = Math.Min(p1.X, p2.X);
+        double maxX = Math.Max(p1.X, p2.X);
+        double minY = Math.Min(p1.Y, p2.Y);
+        double maxY = Math.Max(p1.Y, p2.Y);
+
+        // Ignore les micro-clics accidentels (< 5px)
+        if ((maxX - minX) < 5.0 && (maxY - minY) < 5.0) return;
+
+        Diagram.UnselectAll();
+
+        // 1. Sélectionne tous les nœuds (Machines, Stockages, Portails) qui chevauchent le rectangle
+        foreach (var node in Diagram.Nodes)
+        {
+            double w = node.Size?.Width ?? (node is MachineNodeModel ? 330.0 : 260.0);
+            double h = node.Size?.Height ?? (node is MachineNodeModel ? 160.0 : 95.0);
+
+            bool overlaps = node.Position.X <= maxX &&
+                            (node.Position.X + w) >= minX &&
+                            node.Position.Y <= maxY &&
+                            (node.Position.Y + h) >= minY;
+
+            if (overlaps)
+            {
+                Diagram.SelectModel(node, unselectOthers: false);
+            }
+        }
+
+        // 2. Sélectionne tous les liens dont une extrémité ou un sommet est à l'intérieur du rectangle
+        foreach (var link in Diagram.Links)
+        {
+            var pts = new List<Blazor.Diagrams.Core.Geometry.Point>();
+
+            if ((link.Source as SinglePortAnchor)?.Port is PortModel sp)
+                pts.Add(sp.MiddlePosition);
+
+            foreach (var v in link.Vertices)
+                pts.Add(v.Position);
+
+            if ((link.Target as SinglePortAnchor)?.Port is PortModel tp)
+                pts.Add(tp.MiddlePosition);
+
+            bool linkInside = pts.Any(pt => pt.X >= minX && pt.X <= maxX && pt.Y >= minY && pt.Y <= maxY);
+            if (linkInside)
+            {
+                Diagram.SelectModel(link, unselectOthers: false);
+            }
+        }
+
+        Diagram.Refresh();
+    }
+
+
+    // =========================================================================
+    // PRESSE-PAPIERS MULTI-ÉLÉMENTS : COPIER (CTRL+C) / COUPER (CTRL+X) / COLLER (CTRL+V)
+    // =========================================================================
+    private sealed class ClipboardGroupData
+    {
+        public List<SavedNodeData> Machines { get; set; } = new();
+        public List<SavedStorageData> Storages { get; set; } = new();
+        public List<SavedPortalData> Portals { get; set; } = new();
+        public List<SavedLinkData> InternalLinks { get; set; } = new();
+    }
+
+    private ClipboardGroupData? _clipboard;
+    private int _pasteCount = 0;
+
+    /// <summary>
+    /// Copie tous les éléments sélectionnés (machines, stockages, portails et liens internes entre eux).
+    /// </summary>
+    private void CopySelectionToClipboard(bool showNotification = true)
+    {
+        if (Diagram == null) return;
+
+        var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
+        if (selectedNodes.Count == 0) return;
+
+        var selectedNodeIds = selectedNodes.Select(n => n.Id).ToHashSet();
+        var data = new ClipboardGroupData();
+
+        // 1. Capture les machines sélectionnées
+        foreach (var m in selectedNodes.OfType<MachineNodeModel>())
+        {
+            data.Machines.Add(new SavedNodeData
+            {
+                NodeId = m.Id,
+                RecipeId = m.Recipe.RecipeId,
+                MachineId = m.CurrentMachineId,
+                Multiplier = m.Multiplier,
+                X = m.Position.X,
+                Y = m.Position.Y,
+                OrderedInputProductIds = m.Recipe.Inputs.Select(i => i.ProductId).ToList(),
+                OrderedOutputProductIds = m.Recipe.Outputs.Select(o => o.ProductId).ToList()
+            });
+        }
+
+        // 2. Capture les stockages sélectionnés
+        foreach (var s in selectedNodes.OfType<StorageNodeModel>())
+        {
+            data.Storages.Add(new SavedStorageData
+            {
+                NodeId = s.Id,
+                ProductId = s.ProductId,
+                X = s.Position.X,
+                Y = s.Position.Y
+            });
+        }
+
+        // 3. Capture les portails sélectionnés
+        foreach (var p in selectedNodes.OfType<PortalNodeModel>())
+        {
+            data.Portals.Add(new SavedPortalData
+            {
+                NodeId = p.Id,
+                Direction = p.Direction,
+                ProductId = p.ProductId,
+                ChannelName = p.ChannelName,
+                SourceExportPortalId = p.SourceExportPortalId,
+                X = p.Position.X,
+                Y = p.Position.Y
+            });
+        }
+
+        // 4. Capture uniquement les liens dont BOTH extrémités font partie de la sélection
+        foreach (var link in Diagram.Links)
+        {
+            if (link.Source is SinglePortAnchor srcAnchor &&
+                srcAnchor.Port is ResourcePortModel srcPort &&
+                link.Target is SinglePortAnchor tgtAnchor &&
+                tgtAnchor.Port is ResourcePortModel tgtPort &&
+                srcPort.Parent is NodeModel srcNode &&
+                tgtPort.Parent is NodeModel tgtNode &&
+                selectedNodeIds.Contains(srcNode.Id) &&
+                selectedNodeIds.Contains(tgtNode.Id))
+            {
+                var savedLink = new SavedLinkData
+                {
+                    SourceNodeId = srcNode.Id,
+                    SourceProductId = srcPort.ProductId,
+                    SourceDirection = srcPort.Direction,
+                    TargetNodeId = tgtNode.Id,
+                    TargetProductId = tgtPort.ProductId,
+                    TargetDirection = tgtPort.Direction
+                };
+
+                foreach (var v in link.Vertices)
+                {
+                    savedLink.Vertices.Add(new double[] { v.Position.X, v.Position.Y });
+                }
+
+                data.InternalLinks.Add(savedLink);
+            }
+        }
+
+        _clipboard = data;
+        _pasteCount = 0;
+
+        if (showNotification)
+        {
+            Snackbar.Add($"Copied {selectedNodes.Count} item(s) and {data.InternalLinks.Count} link(s).", Severity.Info, cfg =>
+            {
+                cfg.VisibleStateDuration = 1200;
+                cfg.ShowCloseIcon = false;
+            });
+        }
+    }
+
+    /// <summary>
+    /// Coupe les éléments sélectionnés (Copie + Suppression immédiate).
+    /// </summary>
+    private void CutSelectionToClipboard()
+    {
+        if (Diagram == null) return;
+
+        var selectedNodes = Diagram.Nodes.Where(n => n.Selected).ToList();
+        var selectedLinks = Diagram.Links.Where(l => l.Selected).ToList();
+        if (selectedNodes.Count == 0 && selectedLinks.Count == 0) return;
+
+        if (selectedNodes.Count > 0)
+        {
+            CopySelectionToClipboard(showNotification: false);
+        }
+
+        foreach (var link in selectedLinks)
+            Diagram.Links.Remove(link);
+
+        foreach (var node in selectedNodes)
+            Diagram.Nodes.Remove(node);
+
+        Snackbar.Add($"Cut {selectedNodes.Count} item(s).", Severity.Warning, cfg =>
+        {
+            cfg.VisibleStateDuration = 1200;
+            cfg.ShowCloseIcon = false;
+        });
+    }
+
+    /// <summary>
+    /// Colle le groupe mémorisé dans l'onglet actif en décalant légèrement sa position
+    /// et en reconstituant tous les liens internes.
+    /// </summary>
+    private async Task PasteFromClipboard()
+    {
+        if (Diagram == null || _clipboard == null || Recipes == null) return;
+
+        _pasteCount++;
+        double offset = 40.0 * _pasteCount;
+
+        var nodeMap = new Dictionary<string, NodeModel>();
+        var newlyCreatedNodes = new List<NodeModel>();
+
+        try
+        {
+            _isBulkUpdating = true;
+
+            // 1. Recréation des machines
+            foreach (var savedNode in _clipboard.Machines)
+            {
+                var recipe = Recipes.FirstOrDefault(r => r.RecipeId == savedNode.RecipeId);
+                if (recipe == null) continue;
+
+                var node = new MachineNodeModel(recipe, new Blazor.Diagrams.Core.Geometry.Point(savedNode.X + offset, savedNode.Y + offset))
+                {
+                    Multiplier = savedNode.Multiplier
+                };
+
+                if (!string.IsNullOrWhiteSpace(savedNode.MachineId) && node.CurrentMachineId != savedNode.MachineId)
+                {
+                    while (node.CurrentMachineId != savedNode.MachineId && node.Upgrade()) { }
+                }
+
+                node.ApplyCustomPortOrder(savedNode.OrderedInputProductIds, savedNode.OrderedOutputProductIds);
+
+                Diagram.Nodes.Add(node);
+                nodeMap[savedNode.NodeId] = node;
+                newlyCreatedNodes.Add(node);
+            }
+
+            // 2. Recréation des stockages
+            foreach (var savedStorage in _clipboard.Storages)
+            {
+                var storage = new StorageNodeModel(
+                    savedStorage.ProductId,
+                    new Blazor.Diagrams.Core.Geometry.Point(savedStorage.X + offset, savedStorage.Y + offset)
+                );
+
+                Diagram.Nodes.Add(storage);
+                nodeMap[savedStorage.NodeId] = storage;
+                newlyCreatedNodes.Add(storage);
+            }
+
+            // 3. Recréation des portails
+            foreach (var savedPortal in _clipboard.Portals)
+            {
+                var portal = new PortalNodeModel(
+                    savedPortal.Direction,
+                    savedPortal.ProductId,
+                    savedPortal.Direction == PortalDirection.Export ? $"{savedPortal.ChannelName} (copy)" : savedPortal.ChannelName,
+                    new Blazor.Diagrams.Core.Geometry.Point(savedPortal.X + offset, savedPortal.Y + offset),
+                    savedPortal.SourceExportPortalId
+                );
+
+                Diagram.Nodes.Add(portal);
+                nodeMap[savedPortal.NodeId] = portal;
+                newlyCreatedNodes.Add(portal);
+            }
+
+            // 4. Recréation des liens internes entre les éléments collés
+            foreach (var savedLink in _clipboard.InternalLinks)
+            {
+                if (nodeMap.TryGetValue(savedLink.SourceNodeId, out var srcNode) &&
+                    nodeMap.TryGetValue(savedLink.TargetNodeId, out var tgtNode))
+                {
+                    var srcPort = srcNode.Ports.OfType<ResourcePortModel>()
+                        .FirstOrDefault(p => p.Direction == savedLink.SourceDirection &&
+                                             string.Equals(p.ProductId, savedLink.SourceProductId, StringComparison.OrdinalIgnoreCase));
+
+                    var tgtPort = tgtNode.Ports.OfType<ResourcePortModel>()
+                        .FirstOrDefault(p => p.Direction == savedLink.TargetDirection &&
+                                             string.Equals(p.ProductId, savedLink.TargetProductId, StringComparison.OrdinalIgnoreCase));
+
+                    if (srcPort != null && tgtPort != null)
+                    {
+                        var link = new ResourceLinkModel(new SinglePortAnchor(srcPort), new SinglePortAnchor(tgtPort));
+
+                        if (ProductDict.TryGetValue(srcPort.ProductId, out var prod) && !string.IsNullOrWhiteSpace(prod.Color))
+                        {
+                            link.Color = prod.Color;
+                        }
+
+                        if (savedLink.Vertices != null)
+                        {
+                            foreach (var pt in savedLink.Vertices)
+                            {
+                                if (pt.Length == 2)
+                                {
+                                    link.Vertices.Add(new LinkVertexModel(link, new Blazor.Diagrams.Core.Geometry.Point(pt[0] + offset, pt[1] + offset)));
+                                }
+                            }
+                        }
+
+                        Diagram.Links.Add(link);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _isBulkUpdating = false;
+        }
+
+        if (newlyCreatedNodes.Count == 0) return;
+
+        // Laisse Blazor monter les ports dans le DOM avant de sélectionner le groupe
+        StateHasChanged();
+        await Task.Yield();
+
+        Diagram.UnselectAll();
+        foreach (var n in newlyCreatedNodes)
+        {
+            n.Refresh();
+            Diagram.SelectModel(n, unselectOthers: false);
+        }
+
+        Diagram.Refresh();
+        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+
+        Snackbar.Add($"Pasted {newlyCreatedNodes.Count} item(s).", Severity.Success, cfg =>
+        {
+            cfg.VisibleStateDuration = 1200;
+            cfg.ShowCloseIcon = false;
+        });
     }
 
 

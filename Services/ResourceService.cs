@@ -121,4 +121,22 @@ public class ResourceService
         OnGlobalStatsChanged?.Invoke();
     }
 
+
+    // =========================================================================
+    // Événement pour ouvrir la fenêtre d'aide depuis la barre supérieure
+    // =========================================================================
+
+    /// <summary>
+    /// Événement déclenché lors du clic sur l'icône d'aide (?) dans MainLayout.razor.
+    /// </summary>
+    public event Action? OnHelpRequested;
+
+    /// <summary>
+    /// Demande l'ouverture de la fenêtre modale d'aide dans Home.razor.
+    /// </summary>
+    public void RequestHelp()
+    {
+        OnHelpRequested?.Invoke();
+    }
+
 }
