@@ -107,52 +107,6 @@
 
             </div>
 
-            <!-- Menu pour ajouter un stockage avec filtre de recherche intégré -->
-            <MudMenu Label="Add Storage"
-                     StartIcon="@Icons.Material.Filled.Inventory2"
-                     Variant="Variant.Filled"
-                     Color="Color.Info"
-                     Size="MudBlazor.Size.Small"
-                     Dense="true"
-                     MaxHeight="350"
-                     Class="mb-2">
-
-                <!-- 1. Champ de recherche épinglé en haut du menu -->
-                <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
-                    <MudTextField @bind-Value="_storageFilterText"
-                                  Placeholder="Filter products..."
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  IconSize="MudBlazor.Size.Small"
-                                  Immediate="true"
-                                  Clearable="true"
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense" />
-                </div>
-
-                <MudDivider Class="my-1" />
-
-                <!-- 2. Liste déroulante filtrée dynamiquement -->
-                @if (FilteredStorageProducts.Any())
-                {
-                    @foreach (var prod in FilteredStorageProducts)
-                    {
-                        <MudMenuItem OnClick="@(() => AddStorageNode(prod.Id))">
-                            <div class="d-flex align-center gap-2">
-                                <ResourceBadge ProductId="@prod.Id" />
-                                <span>@prod.Name</span>
-                            </div>
-                        </MudMenuItem>
-                    }
-                }
-                else
-                {
-                    <!-- Message affiché si aucune ressource ne correspond -->
-                    <div class="pa-2 text-center" style="color: #71717a; font-size: 0.8rem;">
-                        No product found
-                    </div>
-                }
-            </MudMenu>
 
             <!-- HISTORIQUE DES DERNIÈRES RECHERCHES -->
             @if (_recentProducts.Count > 0)
@@ -328,10 +282,131 @@
          @onkeydown="HandleKeyDown"
          @oncontextmenu:preventDefault="true">
 
-        <!-- 1. BARRE D'ONGLETS D'USINE + PORTAILS INTER-ONGLETS (BUS) -->
-        <!-- Décalée selon l'ouverture du tiroir gauche (348px) et du tiroir droit (268px) -->
-        <div class="factory-tabs-bar d-flex align-center justify-space-between px-2 py-1"
+        <!-- =========================================================================
+             1. BARRE SUPÉRIEURE DU BUS INTER-ONGLETS (EXPORT BUS / IMPORT BUS)
+             Placée juste sous la barre de titre CaptainArchitect et au-dessus des onglets
+             ========================================================================= -->
+        <div class="factory-bus-bar d-flex align-center justify-space-between w-100 px-2 py-1"
              style="@($"{(_drawerOpen ? "padding-left: 348px !important;" : "padding-left: 54px !important;")} {(_summaryDrawerOpen ? "padding-right: 268px !important;" : "padding-right: 54px !important;")}")">
+            
+             <!-- Côté gauche : Menu pour ajouter un stockage avec filtre de recherche intégré -->
+            <div class="d-flex align-center">
+                <MudMenu Label="Add Storage"
+                         StartIcon="@Icons.Material.Filled.Inventory2"
+                         Variant="Variant.Filled"
+                         Color="Color.Info"
+                         Size="MudBlazor.Size.Small"
+                         Dense="true"
+                         MaxHeight="350">
+
+                    <!-- 1. Champ de recherche épinglé en haut du menu -->
+                    <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
+                        <MudTextField @bind-Value="_storageFilterText"
+                                      Placeholder="Filter products..."
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      IconSize="MudBlazor.Size.Small"
+                                      Immediate="true"
+                                      Clearable="true"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" />
+                    </div>
+
+                    <MudDivider Class="my-1" />
+
+                    <!-- 2. Liste déroulante filtrée dynamiquement -->
+                    @if (FilteredStorageProducts.Any())
+                    {
+                        @foreach (var prod in FilteredStorageProducts)
+                        {
+                            <MudMenuItem OnClick="@(() => AddStorageNode(prod.Id))">
+                                <div class="d-flex align-center gap-2">
+                                    <ResourceBadge ProductId="@prod.Id" />
+                                    <span>@prod.Name</span>
+                                </div>
+                            </MudMenuItem>
+                        }
+                    }
+                    else
+                    {
+                        <!-- Message affiché si aucune ressource ne correspond -->
+                        <div class="pa-2 text-center" style="color: #71717a; font-size: 0.8rem;">
+                            No product found
+                        </div>
+                    }
+                </MudMenu>
+            </div>
+
+
+            <!-- Côté droit : Boutons Portails Bus (Export / Import entre onglets) -->
+            <div class="d-flex align-center gap-2">
+                <!-- Menu Poser un Portail EXPORT -->
+                <MudMenu Label="Export Bus"
+                         StartIcon="@Icons.Material.Filled.Output"
+                         Variant="Variant.Outlined"
+                         Color="Color.Secondary"
+                         Size="MudBlazor.Size.Small"
+                         Dense="true"
+                         MaxHeight="350">
+                    <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
+                        <MudTextField @bind-Value="_portalFilterText"
+                                      Placeholder="Filter resource..."
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Immediate="true"
+                                      Clearable="true"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search" />
+                    </div>
+                    <MudDivider Class="my-1" />
+                    @foreach (var prod in FilteredPortalProducts)
+                    {
+                        <MudMenuItem OnClick="@(() => AddExportPortalNode(prod.Id))">
+                            <div class="d-flex align-center gap-2">
+                                <ResourceBadge ProductId="@prod.Id" />
+                                <span>@prod.Name</span>
+                            </div>
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+
+                <!-- Menu Poser un Portail IMPORT -->
+                <MudMenu Label="Import Bus"
+                         StartIcon="@Icons.Material.Filled.Input"
+                         Variant="Variant.Filled"
+                         Color="Color.Info"
+                         Size="MudBlazor.Size.Small"
+                         Dense="true"
+                         MaxHeight="350">
+                    @{
+                        var allExports = GetAllExportPortals().ToList();
+                    }
+                    @if (allExports.Count == 0)
+                    {
+                        <MudMenuItem Disabled="true">No Export created in tabs</MudMenuItem>
+                    }
+                    else
+                    {
+                        @foreach (var item in allExports)
+                        {
+                            <MudMenuItem OnClick="@(() => AddImportPortalNode(item.Portal))">
+                                <div class="d-flex align-center gap-2">
+                                    <ResourceBadge ProductId="@item.Portal.ProductId" />
+                                    <span><strong>[@item.TabName]</strong> @item.Portal.ChannelName (@item.Portal.TotalInputRate.ToString("0.#")/m)</span>
+                                </div>
+                            </MudMenuItem>
+                        }
+                    }
+                </MudMenu>
+            </div>
+
+        </div>
+
+        <!-- =========================================================================
+             2. BARRE DES ONGLETS D'USINE (PLEINE LARGEUR DISPONIBLE)
+             ========================================================================= -->
+        <div class="factory-tabs-bar d-flex align-center px-2 py-1"
+             style="@($"{(_drawerOpen ? "padding-left: 348px !important;" : "padding-left: 12px !important;")} {(_summaryDrawerOpen ? "padding-right: 268px !important;" : "padding-right: 12px !important;")}")">
 
             <!-- Liste horizontale des onglets (réorganisable par glisser-déposer) -->
             <div class="d-flex align-center gap-1 flex-wrap" style="min-width: 0;">
@@ -402,70 +477,8 @@
                 </MudButton>
             </div>
 
-            <!-- Boutons Portails Bus (Export / Import entre onglets) -->
-            <div class="d-flex align-center gap-2" style="flex-shrink: 0;">
-
-                <!-- Menu Poser un Portail EXPORT -->
-                <MudMenu Label="Export Bus"
-                         StartIcon="@Icons.Material.Filled.Output"
-                         Variant="Variant.Outlined"
-                         Color="Color.Secondary"
-                         Size="MudBlazor.Size.Small"
-                         Dense="true"
-                         MaxHeight="350">
-                    <div class="px-2 pt-2 pb-1" @onclick:stopPropagation="true">
-                        <MudTextField @bind-Value="_portalFilterText"
-                                      Placeholder="Filtrer ressource..."
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Immediate="true"
-                                      Clearable="true"
-                                      Adornment="Adornment.Start"
-                                      AdornmentIcon="@Icons.Material.Filled.Search" />
-                    </div>
-                    <MudDivider Class="my-1" />
-                    @foreach (var prod in FilteredPortalProducts)
-                    {
-                        <MudMenuItem OnClick="@(() => AddExportPortalNode(prod.Id))">
-                            <div class="d-flex align-center gap-2">
-                                <ResourceBadge ProductId="@prod.Id" />
-                                <span>@prod.Name</span>
-                            </div>
-                        </MudMenuItem>
-                    }
-                </MudMenu>
-
-                <!-- Menu Poser un Portail IMPORT -->
-                <MudMenu Label="Import Bus"
-                         StartIcon="@Icons.Material.Filled.Input"
-                         Variant="Variant.Filled"
-                         Color="Color.Info"
-                         Size="MudBlazor.Size.Small"
-                         Dense="true"
-                         MaxHeight="350">
-                    @{
-                        var allExports = GetAllExportPortals().ToList();
-                    }
-                    @if (allExports.Count == 0)
-                    {
-                        <MudMenuItem Disabled="true">Aucun Export créé dans les onglets</MudMenuItem>
-                    }
-                    else
-                    {
-                        @foreach (var item in allExports)
-                        {
-                            <MudMenuItem OnClick="@(() => AddImportPortalNode(item.Portal))">
-                                <div class="d-flex align-center gap-2">
-                                    <ResourceBadge ProductId="@item.Portal.ProductId" />
-                                    <span><strong>[@item.TabName]</strong> @item.Portal.ChannelName (@item.Portal.TotalInputRate.ToString("0.#")/m)</span>
-                                </div>
-                            </MudMenuItem>
-                        }
-                    }
-                </MudMenu>
-
-            </div>
         </div>
+
 
         <!-- 2. ZONE DU CANVAS DE L'ONGLET ACTIF -->
         <div class="flex-grow-1 w-100 position-relative"
@@ -979,11 +992,21 @@
 
 
 <style>
-    /* Barre supérieure des onglets d'usine */
+
+    /* Barre supérieure dédiée aux portails Bus (Export / Import) */
+    .factory-bus-bar {
+        background: #18181c;
+        border-bottom: 1px solid #27272a;
+        min-height: 40px;
+        flex-shrink: 0;
+        z-index: 55;
+    }
+
+    /* Barre des onglets d'usine (juste sous la barre Bus) */
     .factory-tabs-bar {
         background: #141418;
         border-bottom: 1px solid #333;
-        min-height: 40px;
+        min-height: 38px;
         flex-shrink: 0;
         z-index: 50;
     }
