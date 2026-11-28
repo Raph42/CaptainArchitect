@@ -9,6 +9,9 @@ public class DiagramSaveData
     // Version du format de sauvegarde au cas où la structure évolue
     public string Version { get; set; } = "2.0";
 
+    // Identifiant de l'onglet actif au moment de la sauvegarde (optionnel)
+    public string? ActiveTabId { get; set; }
+
     // Liste des onglets de l'usine (ex: "Iron", "Steel", etc.)
     public List<SavedTabData> Tabs { get; set; } = new();
 
@@ -27,7 +30,7 @@ public class DiagramSaveData
 
 
 /// <summary>
-/// Contenu sauvegardé d'un onglet individuel.
+/// Contenu sauvegardé d'un onglet individuel (nœuds, liaisons, zoom et position de vue).
 /// </summary>
 public class SavedTabData
 {
@@ -36,6 +39,15 @@ public class SavedTabData
 
     // Identifiant de la ressource utilisée comme icône de l'onglet (optionnel)
     public string? IconProductId { get; set; }
+
+    // Niveau de zoom du diagramme de cet onglet (1.0 = 100%)
+    public double Zoom { get; set; } = 1.0;
+
+    // Décalage horizontal (Pan X) de la caméra sur le canvas
+    public double PanX { get; set; } = 0.0;
+
+    // Décalage vertical (Pan Y) de la caméra sur le canvas
+    public double PanY { get; set; } = 0.0;
 
     public List<SavedNodeData> Nodes { get; set; } = new();
     public List<SavedStorageData> Storages { get; set; } = new();

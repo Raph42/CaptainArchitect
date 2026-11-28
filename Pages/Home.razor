@@ -1842,7 +1842,7 @@
                             (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)))
                 .OrderBy(p => p.Name);
 
-	// Liste filtrée des produits disponibles pour le portail
+    // Liste filtrée des produits disponibles pour le portail
     private IEnumerable<Product> FilteredPortalProducts =>
         string.IsNullOrWhiteSpace(_portalFilterText)
             ? ProductDict.Values.OrderBy(p => p.Name)
@@ -2133,7 +2133,7 @@
 
     // =========================================================================
     // INITIALISATION DU COMPOSANT
-	// =========================================================================
+    // =========================================================================
     protected override async Task OnInitializedAsync()
     {
         // 1. Création immédiate du premier onglet AVANT tout 'await'
@@ -2229,14 +2229,24 @@
     // =========================================================================
     // ACTIONS SUR LES ONGLETS (SÉLECTION, CRÉATION, RENOMMAGE, SUPPRESSION)
     // =========================================================================
-    private void SelectTab(string tabId)
+    private async Task SelectTab(string tabId)
     {
         var target = Tabs.FirstOrDefault(t => t.Id == tabId);
+
         if (target != null && target != ActiveTab)
         {
             ActiveTab = target;
             FlowEngine.RecalculateFlows(Tabs, ResourceService);
             StateHasChanged();
+
+            // Si cet onglet vient d'être chargé depuis une sauvegarde et n'avait pas encore été affiché,
+            // on attend que Blazor monte son <DiagramCanvas> puis on restaure son Zoom et son Pan.
+            if (_pendingTabViews.Remove(target.Id, out var view))
+            {
+                await Task.Yield();
+                ApplyTabViewState(target, view.Zoom, view.PanX, view.PanY);
+            }
+
         }
     }
 
@@ -2573,7 +2583,7 @@
         // 1. Réinitialise le filtre de recherche du menu
         _storageFilterText = "";
 
-		// 2. Calcul du point de spawn centré dans la zone visible du canvas
+        // 2. Calcul du point de spawn centré dans la zone visible du canvas
         var pos = GetCenteredSpawnPoint(260.0, 100.0);
 
         // 2. Création du nœud
@@ -2718,7 +2728,7 @@
         {
             newNode = new StorageNodeModel(storageSrc.ProductId, newPosition);
         }
-		// Cas 3 : Duplication d'un portail (PortalNodeModel)
+        // Cas 3 : Duplication d'un portail (PortalNodeModel)
         else if (originalNode is PortalNodeModel portalSrc)
         {
             newNode = new PortalNodeModel(
@@ -2806,9 +2816,6 @@
     }
 
 
-    // =========================================================================
-    // CLEAR, SAVE & LOAD MULTI-ONGLETS (AVEC RÉTROCOMPATIBILITÉ v1.x)
-    // =========================================================================
 
     // =========================================================================
     // CLEAR, SAVE & LOAD MULTI-ONGLETS (AVEC RÉTROCOMPATIBILITÉ v1.x)
@@ -2820,6 +2827,8 @@
     /// </summary>
     private async Task NewFactory()
     {
+        _pendingTabViews.Clear();
+
         // 1. Demande de confirmation avant de tout effacer (syntaxe asynchrone MudBlazor v7+)
         bool? confirm = await DialogService.ShowMessageBoxAsync(
             title: "New Factory",
@@ -2903,9 +2912,14 @@
     {
         try
         {
-            var saveData = new DiagramSaveData { Version = "2.0" };
+            var saveData = new DiagramSaveData
+            {
+                Version = "2.0",
+                ActiveTabId = ActiveTab?.Id
+            };
 
 
+            // Parcours de chaque onglet de l'usine
             foreach (var tab in Tabs)
             {
                 var savedTab = new SavedTabData
@@ -2913,7 +2927,12 @@
                     TabId = tab.Id,
                     Name = tab.Name,
                     // Sauvegarde l'icône de ressource choisie pour cet onglet
-                    IconProductId = tab.IconProductId
+                    IconProductId = tab.IconProductId,
+
+                    // Sauvegarde du niveau de zoom et de la position (Pan) propres à cet onglet
+                    Zoom = tab.Diagram.Zoom,
+                    PanX = tab.Diagram.Pan.X,
+                    PanY = tab.Diagram.Pan.Y
                 };
 
                 // 1. Sauvegarde des nœuds (machines)
@@ -2946,7 +2965,7 @@
                     });
                 }
 
-				// 3. Sauvegarde de tous les portails (PortalNodeModel)
+                // 3. Sauvegarde de tous les portails (PortalNodeModel)
                 foreach (var portal in tab.Diagram.Nodes.OfType<PortalNodeModel>())
                 {
                     savedTab.Portals.Add(new SavedPortalData
@@ -3009,6 +3028,26 @@
     }
 
 
+    // Mémorise temporairement le (Zoom, PanX, PanY) des onglets chargés depuis un fichier
+    // qui ne sont pas encore affichés à l'écran, afin de les appliquer dès la première ouverture de l'onglet.
+    private readonly Dictionary<string, (double Zoom, double PanX, double PanY)> _pendingTabViews = new();
+
+    /// <summary>
+    /// Applique le zoom et la position (Pan) sauvegardés sur le diagramme d'un onglet donné.
+    /// </summary>
+    private void ApplyTabViewState(FactoryTab tab, double zoom, double panX, double panY)
+    {
+        if (tab?.Diagram == null) return;
+
+        // Sécurité : empêche un zoom nul ou négatif si un ancien fichier JSON ne contenait pas la propriété
+        double validZoom = zoom > 0.05 ? zoom : 1.0;
+
+        tab.Diagram.SetZoom(validZoom);
+        tab.Diagram.SetPan(panX, panY);
+        tab.Diagram.Refresh();
+    }
+
+
     /// <summary>
     /// Charge et reconstruit le diagramme depuis un fichier JSON sélectionné par l'utilisateur.
     /// Recrée les machines, les stockages et rétablit tous les liens.
@@ -3017,6 +3056,8 @@
     {
         var file = e.File;
         if (file == null) return;
+
+        _pendingTabViews.Clear();
 
         try
         {
@@ -3067,9 +3108,11 @@
 
             int totalTabs = Math.Max(1, saveData.Tabs.Count);
 
+            // Boucle qui reconstruit chaque onglet
             for (int t = 0; t < saveData.Tabs.Count; t++)
             {
                 var savedTab = saveData.Tabs[t];
+
                 var tab = new FactoryTab
                 {
                     Id = string.IsNullOrWhiteSpace(savedTab.TabId) ? Guid.NewGuid().ToString("N") : savedTab.TabId,
@@ -3078,6 +3121,11 @@
                     IconProductId = savedTab.IconProductId,
                     Diagram = CreateConfiguredDiagram()
                 };
+
+
+                // Enregistre le zoom et le pan sauvegardés pour cet onglet
+                double savedZoom = savedTab.Zoom > 0.05 ? savedTab.Zoom : 1.0;
+                _pendingTabViews[tab.Id] = (savedZoom, savedTab.PanX, savedTab.PanY);
 
                 // Dictionnaire unifié pour mapper les anciens ID vers les nouvelles instances de NodeModel (Machines OU Stockages)
                 var allNodesMap = new Dictionary<string, NodeModel>();
@@ -3200,7 +3248,9 @@
                 _loadingStatusText = $"Loading tab '{tab.Name}' ({t + 1}/{totalTabs})...";
                 StateHasChanged();
                 await Task.Yield();
-            }
+
+            } // Fin de la boucle qui reconstruit chaque onglet
+
 
             // Rebranche les portails Import vers les nouveaux identifiants des portails Export
             foreach (var (importPortal, oldExportId) in importedPortalsToRelink)
@@ -3227,7 +3277,29 @@
 
             _isBulkUpdating = false;
             FlowEngine.RecalculateFlows(Tabs, ResourceService);
-            Diagram.Refresh();
+
+            //Diagram.Refresh();
+
+
+            // Restaure l'onglet qui était actif lors de la sauvegarde (ou le premier par défaut)
+            if (!string.IsNullOrWhiteSpace(saveData.ActiveTabId))
+            {
+                ActiveTab = Tabs.FirstOrDefault(t => t.Id == saveData.ActiveTabId) ?? Tabs[0];
+            }
+            else
+            {
+                ActiveTab = Tabs[0];
+            }
+
+            // Force le rendu du <DiagramCanvas> de l'onglet actif avant d'appliquer son Zoom et son Pan
+            StateHasChanged();
+            await Task.Yield();
+
+            if (_pendingTabViews.Remove(ActiveTab.Id, out var activeView))
+            {
+                ApplyTabViewState(ActiveTab, activeView.Zoom, activeView.PanX, activeView.PanY);
+            }
+
 
             //Snackbar.Add($"Diagram successfully loaded ({Tabs.Count} tab(s)) !", Severity.Success);
         
