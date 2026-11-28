@@ -1366,9 +1366,10 @@
             border-color: #52525b;
         }
 
+    /* Réduction légère de la taille du nom de ressource dans le panneau de 260px */
     .summary-prod-name {
         color: #f4f4f5;
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
@@ -1421,15 +1422,6 @@
             white-space: nowrap !important;
         }
 
-    /* Réduction légère de la taille du nom de ressource dans le panneau de 260px */
-    .summary-prod-name {
-        color: #f4f4f5;
-        font-size: 0.78rem;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
 
 
     /* =========================================================================
@@ -1833,23 +1825,26 @@
     }
 
 
+    /// <summary>
+    /// Filtre la liste déjà triée des produits selon un texte de recherche (utilisé pour Storage et Export Bus).
+    /// </summary>
+    private IEnumerable<Product> FilterProductsByText(string filterText)
+    {
+        if (string.IsNullOrWhiteSpace(filterText))
+            return _allProducts;
+
+        var term = filterText.Trim();
+        return _allProducts.Where(p =>
+            (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(term, StringComparison.OrdinalIgnoreCase)));
+    }
+
     // Liste filtrée des produits disponibles pour le stockage
-    private IEnumerable<Product> FilteredStorageProducts =>
-        string.IsNullOrWhiteSpace(_storageFilterText)
-            ? ProductDict.Values.OrderBy(p => p.Name)
-            : ProductDict.Values
-                .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-                            (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(_storageFilterText.Trim(), StringComparison.OrdinalIgnoreCase)))
-                .OrderBy(p => p.Name);
+    private IEnumerable<Product> FilteredStorageProducts => FilterProductsByText(_storageFilterText);
 
     // Liste filtrée des produits disponibles pour le portail
-    private IEnumerable<Product> FilteredPortalProducts =>
-        string.IsNullOrWhiteSpace(_portalFilterText)
-            ? ProductDict.Values.OrderBy(p => p.Name)
-            : ProductDict.Values
-                .Where(p => (!string.IsNullOrEmpty(p.Name) && p.Name.Contains(_portalFilterText.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-                            (!string.IsNullOrEmpty(p.Id) && p.Id.Contains(_portalFilterText.Trim(), StringComparison.OrdinalIgnoreCase)))
-                .OrderBy(p => p.Name);
+    private IEnumerable<Product> FilteredPortalProducts => FilterProductsByText(_portalFilterText);
+
 
     // Propriété de filtrage des recettes
     private IEnumerable<Recipe>? FilteredRecipes =>
@@ -2160,8 +2155,8 @@
 
                 if (data.Products != null)
                 {
-                    // Conserve la liste complète pour la barre de recherche
-                    _allProducts = data.Products;
+                    // Conserve la liste complète triée par nom une seule fois au chargement
+                    _allProducts = data.Products.OrderBy(p => p.Name).ToList();
 
                     ProductDict = data.Products.ToDictionary(p => p.Id, p => p);
                     ResourceService.LoadProducts(data.Products);
@@ -2429,10 +2424,10 @@
         if (Tabs.Count <= 1) return;
 
         bool? confirm = await DialogService.ShowMessageBoxAsync(
-            title: "Supprimer l'onglet",
-            message: $"Supprimer l'onglet '{tab.Name}' et toutes ses machines ?",
-            yesText: "Supprimer",
-            cancelText: "Annuler"
+            title: "Delete Tab",
+            message: $"Delete Tab '{tab.Name}' and all its machines ?",
+            yesText: "Delete",
+            cancelText: "Cancel"
         );
 
         if (confirm != true) return;
@@ -2490,7 +2485,9 @@
 
     private async Task AddExportPortalNode(string productId)
     {
+        // Réinitialise le filtre de recherche du menu Export Bus
         _portalFilterText = "";
+
         var prodName = ProductDict.TryGetValue(productId, out var prod) ? prod.Name : productId;
         var pos = GetCenteredSpawnPoint(285.0, 90.0);
 
@@ -2501,16 +2498,7 @@
             position: pos
         );
 
-        Diagram.UnselectAll();
-        Diagram.Nodes.Add(exportNode);
-
-        StateHasChanged();
-        await Task.Yield();
-
-        Diagram.SelectModel(exportNode, unselectOthers: true);
-        exportNode.Refresh();
-        Diagram.Refresh();
-        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        await SpawnAndSelectNodeAsync(exportNode);
     }
 
 
@@ -2526,17 +2514,35 @@
             sourceExportPortalId: sourceExport.Id
         );
 
-        Diagram.UnselectAll();
-        Diagram.Nodes.Add(importNode);
+        await SpawnAndSelectNodeAsync(importNode);
+    }
 
+
+
+    /// <summary>
+    /// Ajoute un nœud sur le diagramme actif, attend le montage de ses ports dans le DOM,
+    /// le sélectionne et recalcule les flux.
+    /// </summary>
+    private async Task SpawnAndSelectNodeAsync(NodeModel node)
+    {
+        if (Diagram == null) return;
+
+        Diagram.UnselectAll();
+        Diagram.Nodes.Add(node);
+
+        // Force le rendu DOM pour que le widget du nœud et ses ports soient montés
         StateHasChanged();
         await Task.Yield();
 
-        Diagram.SelectModel(importNode, unselectOthers: true);
-        importNode.Refresh();
+        // Sélectionne automatiquement le nouvel élément posé
+        Diagram.SelectModel(node, unselectOthers: true);
+
+        // Rafraîchissement géométrique et calcul des flux
+        node.Refresh();
         Diagram.Refresh();
         FlowEngine.RecalculateFlows(Tabs, ResourceService);
     }
+
 
 
     // =========================================================================
@@ -2553,24 +2559,7 @@
         // 1. Calcul du point de spawn centré dans la zone visible du canvas
         var pos = GetCenteredSpawnPoint(330.0, 160.0);
 
-        // 2. Instanciation du nœud à la position calculée
-        var machineNode = new MachineNodeModel(recipe, pos);
-
-        // 3. Désélectionne les éventuels éléments actifs et ajoute la machine
-        Diagram.UnselectAll();
-        Diagram.Nodes.Add(machineNode);
-
-        // 4. Force le rendu DOM pour que le widget de la machine soit monté
-        StateHasChanged();
-        await Task.Yield();
-
-        // 5. Sélectionne automatiquement la nouvelle machine posée
-        Diagram.SelectModel(machineNode, unselectOthers: true);
-
-        // 6. Rafraîchissement géométrique et flux
-        machineNode.Refresh();
-        Diagram.Refresh();
-        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        await SpawnAndSelectNodeAsync(new MachineNodeModel(recipe, pos));
     }
 
 
@@ -2586,24 +2575,7 @@
         // 2. Calcul du point de spawn centré dans la zone visible du canvas
         var pos = GetCenteredSpawnPoint(260.0, 100.0);
 
-        // 2. Création du nœud
-        var storageNode = new StorageNodeModel(productId, pos);
-
-        // 3. Désélectionne les anciens nœuds et ajoute le nouveau stockage
-        Diagram.UnselectAll();
-        Diagram.Nodes.Add(storageNode);
-
-        // 4. Laisse le temps au DOM de rendre StorageNodeWidget et PortRenderer
-        StateHasChanged();
-        await Task.Yield();
-
-        // 5. Sélectionne automatiquement le nouveau stockage posé
-        Diagram.SelectModel(storageNode, unselectOthers: true);
-
-        // 6. Force la mesure géométrique des ports, rafraîchit le canvas et calcule les flux
-        storageNode.Refresh();
-        Diagram.Refresh();
-        FlowEngine.RecalculateFlows(Tabs, ResourceService);
+        await SpawnAndSelectNodeAsync(new StorageNodeModel(productId, pos));
     }
 
 
@@ -2637,17 +2609,6 @@
             _isHelpModalOpen = false;
         }
 
-
-        // 2. Duplication par raccourci Ctrl + D
-        // else if ((e.CtrlKey || e.MetaKey) && (e.Key is "d" or "D"))
-        // {
-        //     var selectedNode = Diagram.Nodes.FirstOrDefault(n => n.Selected);
-
-        //     if (selectedNode != null)
-        //     {
-        //         await DuplicateNode(selectedNode);
-        //     }
-        // }
 
         // 2. Copier la sélection (Ctrl + C)
         else if ((e.CtrlKey || e.MetaKey) && (e.Key is "c" or "C"))
@@ -2734,7 +2695,7 @@
             newNode = new PortalNodeModel(
                 portalSrc.Direction,
                 portalSrc.ProductId,
-                portalSrc.Direction == PortalDirection.Export ? $"{portalSrc.ChannelName} (copie)" : portalSrc.ChannelName,
+                portalSrc.Direction == PortalDirection.Export ? $"{portalSrc.ChannelName} (copy)" : portalSrc.ChannelName,
                 newPosition,
                 portalSrc.SourceExportPortalId
             );
@@ -2903,6 +2864,7 @@
         FlowEngine.RecalculateFlows(Tabs, ResourceService);
         StateHasChanged();
     }
+
 
 
     /// <summary>
@@ -3422,11 +3384,10 @@
         var (targetTab, targetMachine) = producers[_lastLocatedProducerIndex];
 
         // 3. Bascule vers l'onglet de la machine si ce n'est pas l'onglet actif
+        // (await garantit que la restauration éventuelle du Zoom/Pan de l'onglet est terminée avant de centrer la caméra)
         if (ActiveTab?.Id != targetTab.Id)
         {
-            SelectTab(targetTab.Id);
-            StateHasChanged();
-            await Task.Yield();
+            await SelectTab(targetTab.Id);
         }
 
         // 4. Désélectionne les autres nœuds et sélectionne la machine cible
